@@ -2,6 +2,7 @@ import control as con
 import numpy as np
 import matplotlib.pyplot as plt
 from distillation_ctrl.c2d_utils import c2d_with_delay
+from distillation_ctrl.sim_utils import mimo_forced_response
 
 
 # -----------------------------------------------------------------------------
@@ -80,6 +81,36 @@ for j in range(nu):
             out_names = ['OHt', 'L', 'BmT']
             ax.set_ylabel(out_names[i])
         ax.set_title(f'Out {i+1} vs In {j+1}')
+
+plt.tight_layout(rect=[0, 0, 1, 0.95])
+plt.show()
+
+# Additional scenario: step in V at t=5, step in D at t=30
+# (plot inputs and three primary outputs: OHt, L, BmT)
+t = np.arange(0, 61, Ts)
+u_V = np.zeros_like(t)
+u_D = np.zeros_like(t)
+u_V[t >= 5] = 1
+u_D[t >= 30] = 1
+
+U = np.vstack([u_V, u_D])
+yout = mimo_forced_response(T, t, U)
+
+fig, axs = plt.subplots(2, 1, figsize=(7, 4), sharex=True)
+fig.suptitle('DT step-input scenario: V@10, D@30 (60 min)')
+axs[0].step(t, u_V, where='post', label='V step')
+axs[0].step(t, u_D, where='post', label='D step')
+axs[0].set_ylabel('Inputs')
+axs[0].legend(loc='upper left')
+axs[0].grid(True, alpha=0.4)
+
+axs[1].step(t, yout[0], where='post', label='OHt')
+axs[1].step(t, yout[1], where='post', label='L')
+axs[1].step(t, yout[2], where='post', label='BmT')
+axs[1].set_ylabel('Outputs')
+axs[1].set_xlabel('time [min]')
+axs[1].legend(loc='upper left')
+axs[1].grid(True, alpha=0.4)
 
 plt.tight_layout(rect=[0, 0, 1, 0.95])
 plt.show()

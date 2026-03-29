@@ -2,6 +2,7 @@ import control as con
 import numpy as np
 import matplotlib.pyplot as plt
 from distillation_ctrl.delay_ct import delay_tf
+from distillation_ctrl.sim_utils import mimo_forced_response
 
 
 # -----------------------------------------------------------------------------
@@ -95,4 +96,36 @@ for j in range(nu):
         ax.set_title(f'Output {i+1} vs Input {j+1}')
 
 plt.tight_layout(rect=[0, 0, 1, 0.97])
+plt.show()
+
+# Additional scenario: step in V at t=5, step in D at t=20
+# (plot inputs and three primary outputs: OHt, L, BmT)
+t = np.arange(0, 61, 1)
+u_V = np.zeros_like(t)
+u_D = np.zeros_like(t)
+u_V[t >= 5] = 1
+u_D[t >= 30] = 1
+
+# Simulate the step profile using fallback MIMO routine.
+# This does not require the Slycot dependency.
+U = np.vstack([u_V, u_D])
+yout = mimo_forced_response(T, t, U)
+
+fig, axs = plt.subplots(2, 1, figsize=(7, 4), sharex=True)
+fig.suptitle('CT step-input scenario: V@10, D@30 (60 min)')
+axs[0].plot(t, u_V, label='V step', drawstyle='steps-post')
+axs[0].plot(t, u_D, label='D step', drawstyle='steps-post')
+axs[0].set_ylabel('Inputs')
+axs[0].legend(loc='upper left')
+axs[0].grid(True, alpha=0.4)
+
+axs[1].plot(t, yout[0], label='OHt')
+axs[1].plot(t, yout[1], label='L')
+axs[1].plot(t, yout[2], label='BmT')
+axs[1].set_ylabel('Outputs')
+axs[1].set_xlabel('time [min]')
+axs[1].legend(loc='upper left')
+axs[1].grid(True, alpha=0.4)
+
+plt.tight_layout(rect=[0, 0, 1, 0.95])
 plt.show()
