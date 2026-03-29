@@ -31,11 +31,11 @@ from distillation_ctrl.delay_ct import delay_tf
 s = con.TransferFunction.s
 
 # core continuous paths
-G_V_OHt = 0.2 * delay_tf(4) * 1.0/(6*s + 1)
+G_V_OHt = -0.2 * delay_tf(4) * 1.0/(6*s + 1)
 G_D_OHt = 0.3 * delay_tf(3) * 1.0/(4*s + 1)
 
 G_V_L = 1.0 * delay_tf(5) * 1.0/(8*s + 1)
-G_D_L = 1.0 * delay_tf(1) * 1.0/(4*s + 1)
+G_D_L = -1.0 * delay_tf(1) * 1.0/(4*s + 1)
 
 G_V_BmT = 1.0 * delay_tf(2) * 1.0/(4*s + 1)
 G_D_BmT = 1.2 * delay_tf(5) * 1.0/(6*s + 1)
@@ -60,7 +60,7 @@ for i, row in enumerate(T_blocks):
 # Build true MIMO TF object via combine_tf
 # (transfers continuous systems directly)
 T = con.combine_tf(T_blocks)
-print("True MIMO TF T(s):")
+print("Continuous-time MIMO TF T(s):")
 print(T)
 
 # verify step responses quickly

@@ -26,11 +26,11 @@ Ts = 1.0  # minutes
 s = con.TransferFunction.s
 
 # Continuous SISO plant parts (no dead-time yet)
-G_V_OHt_ct = 0.2 * 1.0/(6*s + 1)
+G_V_OHt_ct = -0.2 * 1.0/(6*s + 1)
 G_D_OHt_ct = 0.3 * 1.0/(4*s + 1)
 
 G_V_L_ct = 1.0 * 1.0/(8*s + 1)
-G_D_L_ct = 1.0 * 1.0/(4*s + 1)
+G_D_L_ct = -1.0 * 1.0/(4*s + 1)
 
 G_V_BmT_ct = 1.0 * 1.0/(4*s + 1)
 G_D_BmT_ct = 1.2 * 1.0/(6*s + 1)
@@ -57,7 +57,7 @@ T = con.combine_tf(
         [G_V_BmT, G_D_BmT]
     ]
 )
-print('Discrete-time TRUE MIMO TF T(z):')
+print('Discrete-time MIMO TF T(z):')
 print(T)
 
 # step response grid (ny, nu)
