@@ -1,6 +1,7 @@
 import control as con
 import numpy as np
 import matplotlib.pyplot as plt
+from distillation_ctrl.delay_ct import delay_tf
 
 
 # -----------------------------------------------------------------------------
@@ -16,10 +17,6 @@ import matplotlib.pyplot as plt
 #   OHt  = tower overhead temperature (degF)
 #   L    = reflux rate (BPH)
 #   BmT  = tower bottom temperature (degF)
-#   Vdot = rate of change of V
-#   Ddot = rate of change of D
-#   V-   = observed passed-through V (observation path)
-#   D-   = observed passed-through D (observation path)
 #
 # Timing conventions from spreadsheet:
 #   time constants are first-order lags in minutes
@@ -33,30 +30,17 @@ import matplotlib.pyplot as plt
 # Laplace variable
 s = con.TransferFunction.s
 
-from distillation_ctrl.delay_ct import delay_tf
-
 # core continuous paths
 G_V_OHt = 0.2 * delay_tf(4) * 1.0/(6*s + 1)
 G_D_OHt = 0.3 * delay_tf(3) * 1.0/(4*s + 1)
 
-G_V_L   = 1.0 * delay_tf(5) * 1.0/(8*s + 1)
-G_D_L   = 1.0 * delay_tf(1) * 1.0/(4*s + 1)
+G_V_L = 1.0 * delay_tf(5) * 1.0/(8*s + 1)
+G_D_L = 1.0 * delay_tf(1) * 1.0/(4*s + 1)
 
 G_V_BmT = 1.0 * delay_tf(2) * 1.0/(4*s + 1)
 G_D_BmT = 1.2 * delay_tf(5) * 1.0/(6*s + 1)
 
-G_low = 1.0/(0.001*s + 1)  # same first-order block reused for
-# rate / observation paths
-
-# Vdot and Ddot are rate-of-change monitoring signals (from manipulations)
-# V- and D- are direct pass-through observation elements used for diagnostics.
-# In the Simulink screenshot, these are implemented as 1-step delay + small lag.
-G_Vdot = delay_tf(1) * G_low
-G_Ddot = delay_tf(1) * G_low
-G_Vm   = delay_tf(1) * G_low
-G_Dm   = delay_tf(1) * G_low
-
-# build 2-input, 7-output MIMO transfer function directly as matrix
+# build 2-input, 3-output MIMO transfer function directly as matrix
 # Using combine_tf ensures MATLAB-like MIMO assembly
 # without manual num/den handling
 # output ordering: OHt, L, BmT, Vdot, Ddot, V-, D-
@@ -65,11 +49,7 @@ G_Dm   = delay_tf(1) * G_low
 T_blocks = [
     [G_V_OHt, G_D_OHt],
     [G_V_L,   G_D_L],
-    [G_V_BmT, G_D_BmT],
-    [G_Vdot,  0],
-    [0,       G_Ddot],
-    [G_Vm,    0],
-    [0,       G_Dm]
+    [G_V_BmT, G_D_BmT]
 ]
 
 print("System T(s) matrix entries (decomposed):")
@@ -84,8 +64,8 @@ print("True MIMO TF T(s):")
 print(T)
 
 # verify step responses quickly
-# ny = 7 outputs, nu = 2 inputs
-ny, nu = 7, 2
+# ny = 3 outputs, nu = 2 inputs
+ny, nu = 3, 2
 
 # Plot multi-input multi-output step responses in a grid
 
@@ -95,7 +75,7 @@ t = np.linspace(0, 60, 601)
 # Get full MIMO step response: y shape is (ny, len(t), nu)
 # control.step_response for MIMO returns y, x, and u;
 # we can step each input separately.
-fig, axs = plt.subplots(ny, nu, figsize=(12, 10), sharex=True)
+fig, axs = plt.subplots(ny, nu, figsize=(8, 5.5), sharex=True)
 fig.suptitle('MIMO Step Responses for Distillation Model')
 
 for j in range(nu):
