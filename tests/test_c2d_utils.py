@@ -1,3 +1,4 @@
+import pytest
 import control as con
 import numpy as np
 from distillation_ctrl.c2d_utils import c2d_with_delay
@@ -10,9 +11,6 @@ def test_c2d_with_delay_no_delay():
     # check dt values and basic poles
     assert abs(dt.dt - 1.0) < 1e-9
     assert np.allclose(dt.poles(), [0.3678794412], atol=1e-5)
-
-
-import pytest
 
 
 @pytest.mark.parametrize('delay_steps', [0, 1, 3])
@@ -58,7 +56,7 @@ def test_c2d_with_delay_applied_on_discretized_first_order():
     _, y_combined = con.step_response(combined, t)
     y_combined = np.asarray(y_combined).flatten()
 
-    # first sample should be zero from pure delay, second should be same as base[0]
+    # first sample should be zero from delay, second should be same as base[0]
     _, y_base = con.step_response(dt_base, t)
     y_base = np.asarray(y_base).flatten()
 

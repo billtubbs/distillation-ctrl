@@ -5,7 +5,8 @@ from distillation_ctrl.c2d_utils import c2d_with_delay
 
 
 # -----------------------------------------------------------------------------
-# Distillation column discrete-time dynamic model (derived from Simulink CT model)
+# Distillation column discrete-time dynamic model
+# (derived from Simulink CT model)
 # Author: Michael Grieve (base model author)
 # Created by: Bill Tubbs
 # Date: March 2026
@@ -40,7 +41,8 @@ G_D_BmT_ct = 1.2 * 1.0/(6*s + 1)
 
 G_low_ct = 1.0/(0.001*s + 1)
 
-# Discrete-time plant with internal delays (use c2d_with_delay from module variant)
+# Discrete-time plant with internal delays
+# (use c2d_with_delay from module variant)
 # Note: local helper removed to avoid shadowing the imported function
 
 G_V_OHt = c2d_with_delay(G_V_OHt_ct, 4)
