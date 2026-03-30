@@ -2,8 +2,8 @@ import os
 import control as con
 import numpy as np
 import matplotlib.pyplot as plt
-from distillation_ctrl.c2d_utils import c2d_with_delay
-from distillation_ctrl.sim_utils import mimo_forced_response
+from dist_ctrl.c2d_utils import c2d_with_delay
+from dist_ctrl.sim_utils import mimo_forced_response
 
 
 # -----------------------------------------------------------------------------
