@@ -43,9 +43,9 @@ N_HORIZON = 30  # MPC prediction horizon [steps]
 
 # Setpoint change at t = SP_TIME
 SP_TIME = 30  # [min]
-OHt_SP = 5.0  # new OHt setpoint after change
+OHt_SP = 2.5  # new OHt setpoint after change
 L_SP = 0.0  # L setpoint after change
-BmT_SP = 5.0  # new BmT setpoint after change
+BmT_SP = 2.5  # new BmT setpoint after change
 
 # Step disturbances on plant inputs (not known to MPC or estimator)
 DIST_V_TIME = 70  # [min] start of step disturbance on V
@@ -58,9 +58,9 @@ U_MIN = -100.0
 U_MAX = 100.0
 
 # MPC cost weights
-Q_WEIGHTS = np.array([100.0, 0.0, 50.0])  # output tracking: OHt, L, BmT
-R_WEIGHTS = np.array([1.0, 1.0])  # input cost:  V, D
-DU_WEIGHTS = np.array([0.5, 0.5])  # input rate-of-change cost
+Q_WEIGHTS = np.array([10.0, 0.0, 10.0])  # output tracking: OHt, L, BmT
+R_WEIGHTS = np.array([0.0, 0.0])  # input cost:  V, D
+DU_WEIGHTS = np.array([1.0, 1.0])  # input rate-of-change cost
 
 # Kalman filter noise parameters
 PROC_NOISE_STD = 1e-2  # process noise std dev (applied to all states)
@@ -166,46 +166,48 @@ def tvp_fun_sim(t_now):
 simulator.set_tvp_fun(tvp_fun_sim)
 simulator.setup()
 
-# ── 4. Kalman filter ──────────────────────────────────────────────────────
-# Discrete-time Kalman filter (runs in parallel with the do_mpc simulator).
+# ── 4. EKF state estimator ────────────────────────────────────────────────────
+# do_mpc's built-in EKF implements the standard discrete-time Kalman filter
+# predict/update cycle, using the model's CasADi expressions to evaluate the
+# linearised system matrices at each step.  For this linear model A_k, C_k are
+# constant, so the EKF is exactly equivalent to the classical Kalman filter.
 #
-# The estimator uses only u_mpc (the MPC output) for prediction – it does NOT
-# know about the input disturbance d.  The estimator corrects for the
-# disturbance through the measurement innovation y_meas - C x_pred.
-#
-# Prediction:
+# Prediction  (using only u_mpc – the estimator does not know about d):
 #   x_pred = A x_hat + B u_mpc
 #   P_pred = A P A^T + Q_proc
 #
-# Update:
-#   S      = C P_pred C^T + R_meas
-#   K      = P_pred C^T S^{-1}
+# Update  (y_meas is the simulator output after u_mpc + d was applied):
+#   K      = P_pred C^T (C P_pred C^T + R_meas)^{-1}
 #   x_hat  = x_pred + K (y_meas - C x_pred)
 #   P      = (I - K C) P_pred
+#
+# Q_proc and R_meas are passed at every make_step() call so they can be varied
+# online; here they are kept constant.
 
 Q_proc = (PROC_NOISE_STD**2) * np.eye(nx)
 R_meas = max(MEAS_NOISE_STD**2, 1e-10) * np.eye(
     ny
 )  # small floor avoids singularity
-I_nx = np.eye(nx)
+
+estimator = do_mpc.estimator.EKF(model)
+estimator.settings.t_step = Ts  # required; no set_param() method on EKF
+
+# The EKF requires a TVP function because y_sp is declared as _tvp in the model.
+# Its value does not affect A/B/C/D (linear model) but a valid CasADi structure
+# must be provided at each time step.
+tvp_template_ekf = estimator.get_tvp_template()
 
 
-def kalman_step(x_hat, P, u_mpc_k, y_meas_k):
-    """One predict-update cycle; returns updated (x_hat, P)."""
-    # Predict
-    x_pred = A @ x_hat + B @ u_mpc_k
-    P_pred = A @ P @ A.T + Q_proc
+def tvp_fun_ekf(t_now):
+    if t_now >= SP_TIME:
+        tvp_template_ekf["y_sp"] = np.array([[OHt_SP], [L_SP], [BmT_SP]])
+    else:
+        tvp_template_ekf["y_sp"] = np.zeros((ny, 1))
+    return tvp_template_ekf
 
-    # Innovation covariance and Kalman gain
-    S = C @ P_pred @ C.T + R_meas
-    K = P_pred @ C.T @ np.linalg.inv(S)
 
-    # Update
-    innov = y_meas_k - (C @ x_pred + D_mat @ u_mpc_k)
-    x_new = x_pred + K @ innov
-    P_new = (I_nx - K @ C) @ P_pred
-
-    return x_new, P_new
+estimator.set_tvp_fun(tvp_fun_ekf)
+estimator.setup()
 
 
 # ── 5. Initialisation ─────────────────────────────────────────────────────
@@ -213,10 +215,10 @@ x0 = np.zeros((nx, 1))
 
 mpc.x0 = x0
 simulator.x0 = x0
+estimator.x0 = x0
+estimator.P0 = np.eye(nx)
 mpc.set_initial_guess()
-
-x_hat = x0.copy()
-P_hat = np.eye(nx)
+estimator.set_initial_guess()
 
 # Pre-allocate history arrays
 t_hist = np.arange(N_SIM) * Ts
@@ -238,7 +240,7 @@ for k in range(N_SIM):
         sp_k = np.zeros((ny, 1))
 
     # --- 6a. MPC: compute optimal control action ---
-    u_mpc = mpc.make_step(x_hat)  # uses current state estimate
+    u_mpc = mpc.make_step(estimator.x0)  # uses current EKF state estimate
 
     # --- 6b. Unmeasured step disturbance on plant inputs ---
     d = np.zeros((nu, 1))
@@ -260,8 +262,8 @@ for k in range(N_SIM):
     )
     y_meas = y_clean + noise
 
-    # --- 6e. Kalman filter: update state estimate ---
-    x_hat, P_hat = kalman_step(x_hat, P_hat, u_mpc, y_meas)
+    # --- 6e. EKF: predict with u_mpc (disturbance unknown), update with y_meas ---
+    estimator.make_step(y_meas, u_mpc, Q_proc, R_meas)
 
     # --- Store ---
     y_hist[k] = y_meas.flatten()
