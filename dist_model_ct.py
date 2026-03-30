@@ -32,14 +32,14 @@ from dist_ctrl.sim_utils import mimo_forced_response
 s = con.TransferFunction.s
 
 # core continuous paths
-G_V_OHt = -0.2 * delay_tf(4) * 1.0/(6*s + 1)
-G_D_OHt = 0.3 * delay_tf(3) * 1.0/(4*s + 1)
+G_V_OHt = -0.2 * delay_tf(4) * 1.0 / (6 * s + 1)
+G_D_OHt = 0.3 * delay_tf(3) * 1.0 / (4 * s + 1)
 
-G_V_L = 1.0 * delay_tf(5) * 1.0/(8*s + 1)
-G_D_L = -1.0 * delay_tf(1) * 1.0/(4*s + 1)
+G_V_L = 1.0 * delay_tf(5) * 1.0 / (8 * s + 1)
+G_D_L = -1.0 * delay_tf(1) * 1.0 / (4 * s + 1)
 
-G_V_BmT = 1.0 * delay_tf(2) * 1.0/(4*s + 1)
-G_D_BmT = 1.2 * delay_tf(5) * 1.0/(6*s + 1)
+G_V_BmT = 1.0 * delay_tf(2) * 1.0 / (4 * s + 1)
+G_D_BmT = 1.2 * delay_tf(5) * 1.0 / (6 * s + 1)
 
 # build 2-input, 3-output MIMO transfer function directly as matrix
 # Using combine_tf ensures MATLAB-like MIMO assembly
@@ -47,11 +47,7 @@ G_D_BmT = 1.2 * delay_tf(5) * 1.0/(6*s + 1)
 # output ordering: OHt, L, BmT, Vdot, Ddot, V-, D-
 # input ordering: V, D
 
-T_blocks = [
-    [G_V_OHt, G_D_OHt],
-    [G_V_L,   G_D_L],
-    [G_V_BmT, G_D_BmT]
-]
+T_blocks = [[G_V_OHt, G_D_OHt], [G_V_L, G_D_L], [G_V_BmT, G_D_BmT]]
 
 print("System T(s) matrix entries (decomposed):")
 for i, row in enumerate(T_blocks):
@@ -77,7 +73,7 @@ t = np.linspace(0, 60, 601)
 # control.step_response for MIMO returns y, x, and u;
 # we can step each input separately.
 fig, axs = plt.subplots(ny, nu, figsize=(8, 5.5), sharex=True)
-fig.suptitle('MIMO Step Responses for Distillation Model')
+fig.suptitle("MIMO Step Responses for Distillation Model")
 
 for j in range(nu):
     # Step only input j (other input zero)
@@ -89,11 +85,11 @@ for j in range(nu):
         ax.plot(t_resp, y_resp, lw=1.2)
         ax.grid(True, alpha=0.4)
         if i == ny - 1:
-            ax.set_xlabel('time [min]')
+            ax.set_xlabel("time [min]")
         if j == 0:
-            out_names = ['OHt', 'L', 'BmT', 'Vdot', 'Ddot', 'V-', 'D-']
+            out_names = ["OHt", "L", "BmT", "Vdot", "Ddot", "V-", "D-"]
             ax.set_ylabel(out_names[i])
-        ax.set_title(f'Output {i+1} vs Input {j+1}')
+        ax.set_title(f"Output {i + 1} vs Input {j + 1}")
 
 plt.tight_layout(rect=[0, 0, 1, 0.97])
 plt.show()
@@ -112,19 +108,19 @@ U = np.vstack([u_V, u_D])
 yout = mimo_forced_response(T, t, U)
 
 fig, axs = plt.subplots(2, 1, figsize=(7, 4), sharex=True)
-fig.suptitle('CT step-input scenario: V@10, D@30 (60 min)')
-axs[0].plot(t, u_V, label='V step', drawstyle='steps-post')
-axs[0].plot(t, u_D, label='D step', drawstyle='steps-post')
-axs[0].set_ylabel('Inputs')
-axs[0].legend(loc='upper left')
+fig.suptitle("CT step-input scenario: V@10, D@30 (60 min)")
+axs[0].plot(t, u_V, label="V step", drawstyle="steps-post")
+axs[0].plot(t, u_D, label="D step", drawstyle="steps-post")
+axs[0].set_ylabel("Inputs")
+axs[0].legend(loc="upper left")
 axs[0].grid(True, alpha=0.4)
 
-axs[1].plot(t, yout[0], label='OHt')
-axs[1].plot(t, yout[1], label='L')
-axs[1].plot(t, yout[2], label='BmT')
-axs[1].set_ylabel('Outputs')
-axs[1].set_xlabel('time [min]')
-axs[1].legend(loc='upper left')
+axs[1].plot(t, yout[0], label="OHt")
+axs[1].plot(t, yout[1], label="L")
+axs[1].plot(t, yout[2], label="BmT")
+axs[1].set_ylabel("Outputs")
+axs[1].set_xlabel("time [min]")
+axs[1].legend(loc="upper left")
 axs[1].grid(True, alpha=0.4)
 
 plt.tight_layout(rect=[0, 0, 1, 0.95])
