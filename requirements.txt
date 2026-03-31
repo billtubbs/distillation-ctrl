@@ -5,3 +5,4 @@ pandas
 pytest
 do-mpc
 casadi
+casadi-models @ git+https://github.com/billtubbs/casadi-models.git
