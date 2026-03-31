@@ -49,6 +49,7 @@ from dist_model_cola_cas.sys_model import (
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def make_param_values(nt=NT):
     """Return a dict of Column A nominal parameter values (numeric DM).
 
@@ -56,9 +57,17 @@ def make_param_values(nt=NT):
     new tests use make_nominal_param_values() directly.
     """
     from dist_model_cola_cas.sys_model import (
-        ALPHA_DEFAULT, TAUL_DEFAULT, F0_DEFAULT, QF0_DEFAULT,
-        L0_DEFAULT, L0B_DEFAULT, LAM_DEFAULT, V0_DEFAULT, V0T_DEFAULT,
+        ALPHA_DEFAULT,
+        TAUL_DEFAULT,
+        F0_DEFAULT,
+        QF0_DEFAULT,
+        L0_DEFAULT,
+        L0B_DEFAULT,
+        LAM_DEFAULT,
+        V0_DEFAULT,
+        V0T_DEFAULT,
     )
+
     return {
         "alpha": cas.DM(ALPHA_DEFAULT),
         "taul": cas.DM(TAUL_DEFAULT),
@@ -96,20 +105,30 @@ U_NOM = np.array([2.70629, 3.20629, 0.5, 0.5, 1.0, 0.5, 1.0])
 # Tests
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(scope="module")
 def model():
     return build_cola_ct_model()
 
 
 def test_model_dimensions(model):
-    assert model.n  == 82
+    assert model.n == 82
     assert model.nu == 7
     assert model.ny == 82
 
 
 def test_model_param_names(model):
     assert list(model.params.keys()) == [
-        "alpha", "taul", "F0", "qF0", "L0", "L0b", "lam", "V0", "V0t", "M0"
+        "alpha",
+        "taul",
+        "F0",
+        "qF0",
+        "L0",
+        "L0b",
+        "lam",
+        "V0",
+        "V0t",
+        "M0",
     ]
 
 
@@ -131,12 +150,12 @@ def test_f_uniform_state_nominal_inputs(model):
     assert xprime.shape == (82,)
 
     # Reboiler and condenser composition derivatives
-    assert xprime[0]  == pytest.approx(-0.641258, rel=1e-5)
-    assert xprime[40] == pytest.approx( 0.641258, rel=1e-5)
+    assert xprime[0] == pytest.approx(-0.641258, rel=1e-5)
+    assert xprime[40] == pytest.approx(0.641258, rel=1e-5)
 
     # All other entries should be zero
     mask = np.ones(82, dtype=bool)
-    mask[0]  = False
+    mask[0] = False
     mask[40] = False
     assert np.allclose(xprime[mask], 0.0, atol=1e-10)
 
@@ -155,49 +174,51 @@ def test_f_linear_profile_nominal_inputs(model):
     assert np.allclose(xprime[NT:], 0.0, atol=1e-10)
 
     # Composition derivatives — reference values from Octave
-    xprime_comps_ref = np.array([
-        -0.1265732571,
-        -0.0245942221,
-        -0.02136345907,
-        -0.01822243946,
-        -0.01516786993,
-        -0.01219660684,
-        -0.009305648157,
-        -0.006492125869,
-        -0.003753298862,
-        -0.001086546251,
-         0.001510638902,
-         0.004040655472,
-         0.006505799823,
-         0.008908271013,
-         0.0112501757,
-         0.01353353277,
-         0.01576027769,
-         0.01793226658,
-         0.02005128013,
-         0.02211902722,
-        -0.01586285161,
-        -0.01389278095,
-        -0.01196924739,
-        -0.01009079665,
-        -0.008256030814,
-        -0.006463605725,
-        -0.004712228538,
-        -0.003000655378,
-        -0.001327689132,
-         0.0003078226462,
-         0.001906989718,
-         0.003470881046,
-         0.005000526578,
-         0.006496918946,
-         0.007961015077,
-         0.009393737718,
-         0.0107959769,
-         0.01216859131,
-         0.01351240961,
-         0.0148282317,
-         0.1068763333,
-    ])
+    xprime_comps_ref = np.array(
+        [
+            -0.1265732571,
+            -0.0245942221,
+            -0.02136345907,
+            -0.01822243946,
+            -0.01516786993,
+            -0.01219660684,
+            -0.009305648157,
+            -0.006492125869,
+            -0.003753298862,
+            -0.001086546251,
+            0.001510638902,
+            0.004040655472,
+            0.006505799823,
+            0.008908271013,
+            0.0112501757,
+            0.01353353277,
+            0.01576027769,
+            0.01793226658,
+            0.02005128013,
+            0.02211902722,
+            -0.01586285161,
+            -0.01389278095,
+            -0.01196924739,
+            -0.01009079665,
+            -0.008256030814,
+            -0.006463605725,
+            -0.004712228538,
+            -0.003000655378,
+            -0.001327689132,
+            0.0003078226462,
+            0.001906989718,
+            0.003470881046,
+            0.005000526578,
+            0.006496918946,
+            0.007961015077,
+            0.009393737718,
+            0.0107959769,
+            0.01216859131,
+            0.01351240961,
+            0.0148282317,
+            0.1068763333,
+        ]
+    )
     assert np.allclose(xprime[:NT], xprime_comps_ref, rtol=1e-6)
 
 
@@ -217,54 +238,56 @@ def test_f_linear_profile_perturbed_reflux(model):
     xprime = call_f(model, t=0.0, x=x, u=u)
 
     # Holdup derivatives: only trays 39 and 40 are non-zero
-    assert np.allclose(xprime[NT:NT + 39], 0.0, atol=1e-10)
-    assert xprime[NT + 39] == pytest.approx( 0.29371, rel=1e-4)
+    assert np.allclose(xprime[NT : NT + 39], 0.0, atol=1e-10)
+    assert xprime[NT + 39] == pytest.approx(0.29371, rel=1e-4)
     assert xprime[NT + 40] == pytest.approx(-0.29371, rel=1e-4)
 
     # Composition derivatives — reference values from Octave
-    xprime_comps_ref = np.array([
-        -0.1265732571,
-        -0.0245942221,
-        -0.02136345907,
-        -0.01822243946,
-        -0.01516786993,
-        -0.01219660684,
-        -0.009305648157,
-        -0.006492125869,
-        -0.003753298862,
-        -0.001086546251,
-         0.001510638902,
-         0.004040655472,
-         0.006505799823,
-         0.008908271013,
-         0.0112501757,
-         0.01353353277,
-         0.01576027769,
-         0.01793226658,
-         0.02005128013,
-         0.02211902722,
-        -0.01586285161,
-        -0.01389278095,
-        -0.01196924739,
-        -0.01009079665,
-        -0.008256030814,
-        -0.006463605725,
-        -0.004712228538,
-        -0.003000655378,
-        -0.001327689132,
-         0.0003078226462,
-         0.001906989718,
-         0.003470881046,
-         0.005000526578,
-         0.006496918946,
-         0.007961015077,
-         0.009393737718,
-         0.0107959769,
-         0.01216859131,
-         0.01351240961,
-         0.0265766317,   # differs from case 2 due to perturbed LT
-         0.1068763333,
-    ])
+    xprime_comps_ref = np.array(
+        [
+            -0.1265732571,
+            -0.0245942221,
+            -0.02136345907,
+            -0.01822243946,
+            -0.01516786993,
+            -0.01219660684,
+            -0.009305648157,
+            -0.006492125869,
+            -0.003753298862,
+            -0.001086546251,
+            0.001510638902,
+            0.004040655472,
+            0.006505799823,
+            0.008908271013,
+            0.0112501757,
+            0.01353353277,
+            0.01576027769,
+            0.01793226658,
+            0.02005128013,
+            0.02211902722,
+            -0.01586285161,
+            -0.01389278095,
+            -0.01196924739,
+            -0.01009079665,
+            -0.008256030814,
+            -0.006463605725,
+            -0.004712228538,
+            -0.003000655378,
+            -0.001327689132,
+            0.0003078226462,
+            0.001906989718,
+            0.003470881046,
+            0.005000526578,
+            0.006496918946,
+            0.007961015077,
+            0.009393737718,
+            0.0107959769,
+            0.01216859131,
+            0.01351240961,
+            0.0265766317,  # differs from case 2 due to perturbed LT
+            0.1068763333,
+        ]
+    )
     assert np.allclose(xprime[:NT], xprime_comps_ref, rtol=1e-6)
 
 
@@ -293,8 +316,20 @@ def test_lv_model_input_names(lv_model):
 
 def test_lv_model_param_names(lv_model):
     assert list(lv_model.params.keys()) == [
-        "alpha", "taul", "F0", "qF0", "L0", "L0b", "lam",
-        "V0", "V0t", "M0", "KcD", "KcB", "Ds", "Bs",
+        "alpha",
+        "taul",
+        "F0",
+        "qF0",
+        "L0",
+        "L0b",
+        "lam",
+        "V0",
+        "V0t",
+        "M0",
+        "KcD",
+        "KcB",
+        "Ds",
+        "Bs",
     ]
 
 
@@ -319,7 +354,7 @@ def test_lv_model_controller_gains(lv_model):
         dMdt[40] ≈ +1.0  (reduced distillate outflow, D=-0.5 vs 0.5)
     """
     x_test = X_SS.copy()
-    x_test[NT] = 0.6          # reboiler holdup perturbed +0.1
+    x_test[NT] = 0.6  # reboiler holdup perturbed +0.1
     x_test[2 * NT - 1] = 0.4  # condenser holdup perturbed -0.1
 
     param_vals = make_nominal_lv_param_values()
@@ -335,6 +370,7 @@ def test_lv_model_controller_gains(lv_model):
 # ---------------------------------------------------------------------------
 # Steady-state rootfinder test
 # ---------------------------------------------------------------------------
+
 
 def test_steady_state_rootfinder(lv_model):
     """Find the Column A steady state via CasADi rootfinder and compare
@@ -366,7 +402,7 @@ def test_steady_state_rootfinder(lv_model):
     assert np.linalg.norm(residual) < 1e-8
 
     # Key compositions match Octave reference to 4 decimal places
-    assert x_ss[0] == pytest.approx(0.01000, abs=1e-4)   # xB (reboiler)
+    assert x_ss[0] == pytest.approx(0.01000, abs=1e-4)  # xB (reboiler)
     assert x_ss[40] == pytest.approx(0.99000, abs=1e-4)  # xD (condenser)
 
     # All holdups at nominal value
@@ -379,6 +415,7 @@ def test_steady_state_rootfinder(lv_model):
 # ---------------------------------------------------------------------------
 # Simulation function builder test
 # ---------------------------------------------------------------------------
+
 
 def test_build_cola_lv_sim_function():
     """build_cola_lv_sim_function returns a valid CasADi simulation function.
@@ -397,8 +434,8 @@ def test_build_cola_lv_sim_function():
     assert "M0" not in scalar_params
     assert len(scalar_params) == len(model.params) - 1  # 13
 
-    assert sim_func.n_in() == 3 + len(scalar_params)   # t_eval, U, x0, *params
-    assert sim_func.n_out() == 2                        # X, Y
+    assert sim_func.n_in() == 3 + len(scalar_params)  # t_eval, U, x0, *params
+    assert sim_func.n_out() == 2  # X, Y
 
     param_vals = make_nominal_sim_param_values()
     t_eval = np.linspace(0.0, nT * dt, nT + 1)

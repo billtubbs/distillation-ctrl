@@ -113,7 +113,9 @@ import numpy as np
 import casadi as cas
 
 from cas_models.continuous_time.models import StateSpaceModelCT
-from cas_models.continuous_time.simulate import make_sim_step_function_integrator_fixed_dt
+from cas_models.continuous_time.simulate import (
+    make_sim_step_function_integrator_fixed_dt,
+)
 from cas_models.discrete_time.simulate import make_n_step_simulation_function
 
 # ---------------------------------------------------------------------------
@@ -148,19 +150,51 @@ BS_DEFAULT = 0.5  # nominal bottoms flow setpoint    [kmol/min]
 # nominal inputs LT=2.70629, VB=3.20629, F=1, zF=0.5, qF=1.
 # norm(xprime) at t=2000: 2.92e-9
 # ---------------------------------------------------------------------------
-X_SS_COMP = np.array([
-    0.01000004946, 0.01426098197, 0.01972368383, 0.02669338974,
-    0.03553129,    0.04665111403, 0.06050561756, 0.07755811532,
-    0.09823455073, 0.1228542705,  0.1515438077,  0.1841475776,
-    0.2201598312,  0.2587075543,  0.2986072091,  0.3384967484,
-    0.3770154943,  0.4129836365,  0.4455332825,  0.4741640485,
-    0.4987250205,  0.5264947888,  0.5577638685,  0.5921605039,
-    0.6290390119,  0.6675065276,  0.7064981526,  0.7448898952,
-    0.7816253042,  0.8158264802,  0.846866089,   0.8743908164,
-    0.8983013842,  0.9187037365,  0.9358482989,  0.9500710134,
-    0.9617443802,  0.971241585,   0.9789132562,  0.9850745778,
-    0.989999967,
-])
+X_SS_COMP = np.array(
+    [
+        0.01000004946,
+        0.01426098197,
+        0.01972368383,
+        0.02669338974,
+        0.03553129,
+        0.04665111403,
+        0.06050561756,
+        0.07755811532,
+        0.09823455073,
+        0.1228542705,
+        0.1515438077,
+        0.1841475776,
+        0.2201598312,
+        0.2587075543,
+        0.2986072091,
+        0.3384967484,
+        0.3770154943,
+        0.4129836365,
+        0.4455332825,
+        0.4741640485,
+        0.4987250205,
+        0.5264947888,
+        0.5577638685,
+        0.5921605039,
+        0.6290390119,
+        0.6675065276,
+        0.7064981526,
+        0.7448898952,
+        0.7816253042,
+        0.8158264802,
+        0.846866089,
+        0.8743908164,
+        0.8983013842,
+        0.9187037365,
+        0.9358482989,
+        0.9500710134,
+        0.9617443802,
+        0.971241585,
+        0.9789132562,
+        0.9850745778,
+        0.989999967,
+    ]
+)
 X_SS_HOLDUPS = 0.5 * np.ones(NT)
 X_SS = np.concatenate([X_SS_COMP, X_SS_HOLDUPS])
 
@@ -205,8 +239,9 @@ def make_nominal_lv_param_values() -> dict:
     return p
 
 
-def _build_cola_rhs(x_comp, M, LT, VB, D, B, F, zF, qF,
-                    alpha, taul, L0, L0b, lam, V0, V0t, M0):
+def _build_cola_rhs(
+    x_comp, M, LT, VB, D, B, F, zF, qF, alpha, taul, L0, L0b, lam, V0, V0t, M0
+):
     """Build the symbolic RHS for Column A from individual symbolic arguments.
 
     Shared by both the open-loop and LV closed-loop model builders.
@@ -279,9 +314,7 @@ def _build_cola_rhs(x_comp, M, LT, VB, D, B, F, zF, qF,
 
     # ---- Composition derivatives ---------------------------------------
     # dx/dt = (d(M*x)/dt - x*dM/dt) / M
-    dxdt = [
-        (dMxdt[i] - x_comp[i] * dMdt[i]) / M[i] for i in range(NT)
-    ]
+    dxdt = [(dMxdt[i] - x_comp[i] * dMdt[i]) / M[i] for i in range(NT)]
 
     return cas.vertcat(*dxdt, *dMdt)
 
@@ -330,8 +363,16 @@ def build_cola_ct_model(name: str = "cola") -> StateSpaceModelCT:
     M0 = cas.SX.sym("M0", NT)
 
     params = {
-        "alpha": alpha, "taul": taul, "F0": F0, "qF0": qF0,
-        "L0": L0, "L0b": L0b, "lam": lam, "V0": V0, "V0t": V0t, "M0": M0,
+        "alpha": alpha,
+        "taul": taul,
+        "F0": F0,
+        "qF0": qF0,
+        "L0": L0,
+        "L0b": L0b,
+        "lam": lam,
+        "V0": V0,
+        "V0t": V0t,
+        "M0": M0,
     }
 
     x_comp = x[:NT]
@@ -339,17 +380,38 @@ def build_cola_ct_model(name: str = "cola") -> StateSpaceModelCT:
     LT, VB, D, B, F, zF, qF = (u[i] for i in range(7))
 
     rhs = _build_cola_rhs(
-        x_comp, M, LT, VB, D, B, F, zF, qF,
-        alpha, taul, L0, L0b, lam, V0, V0t, M0,
+        x_comp,
+        M,
+        LT,
+        VB,
+        D,
+        B,
+        F,
+        zF,
+        qF,
+        alpha,
+        taul,
+        L0,
+        L0b,
+        lam,
+        V0,
+        V0t,
+        M0,
     )
 
     f = cas.Function(
-        "f", [t, x, u, *params.values()], [rhs],
-        ["t", "x", "u", *params.keys()], ["rhs"],
+        "f",
+        [t, x, u, *params.values()],
+        [rhs],
+        ["t", "x", "u", *params.keys()],
+        ["rhs"],
     )
     h = cas.Function(
-        "h", [t, x, u, *params.values()], [x],
-        ["t", "x", "u", *params.keys()], ["y"],
+        "h",
+        [t, x, u, *params.values()],
+        [x],
+        ["t", "x", "u", *params.keys()],
+        ["y"],
     )
 
     state_names = [f"x{i}" for i in range(NT)] + [f"M{i}" for i in range(NT)]
@@ -357,8 +419,15 @@ def build_cola_ct_model(name: str = "cola") -> StateSpaceModelCT:
     output_names = state_names[:]
 
     return StateSpaceModelCT(
-        f, h, n=n, nu=nu, ny=ny, params=params, name=name,
-        state_names=state_names, input_names=input_names,
+        f,
+        h,
+        n=n,
+        nu=nu,
+        ny=ny,
+        params=params,
+        name=name,
+        state_names=state_names,
+        input_names=input_names,
         output_names=output_names,
     )
 
@@ -420,9 +489,20 @@ def build_cola_lv_ct_model(name: str = "cola_lv") -> StateSpaceModelCT:
     Bs = cas.SX.sym("Bs")
 
     params = {
-        "alpha": alpha, "taul": taul, "F0": F0, "qF0": qF0,
-        "L0": L0, "L0b": L0b, "lam": lam, "V0": V0, "V0t": V0t, "M0": M0,
-        "KcD": KcD, "KcB": KcB, "Ds": Ds, "Bs": Bs,
+        "alpha": alpha,
+        "taul": taul,
+        "F0": F0,
+        "qF0": qF0,
+        "L0": L0,
+        "L0b": L0b,
+        "lam": lam,
+        "V0": V0,
+        "V0t": V0t,
+        "M0": M0,
+        "KcD": KcD,
+        "KcB": KcB,
+        "Ds": Ds,
+        "Bs": Bs,
     }
 
     x_comp = x[:NT]
@@ -434,17 +514,38 @@ def build_cola_lv_ct_model(name: str = "cola_lv") -> StateSpaceModelCT:
     B = Bs + KcB * (M[0] - M0[0])
 
     rhs = _build_cola_rhs(
-        x_comp, M, LT, VB, D, B, F, zF, qF,
-        alpha, taul, L0, L0b, lam, V0, V0t, M0,
+        x_comp,
+        M,
+        LT,
+        VB,
+        D,
+        B,
+        F,
+        zF,
+        qF,
+        alpha,
+        taul,
+        L0,
+        L0b,
+        lam,
+        V0,
+        V0t,
+        M0,
     )
 
     f = cas.Function(
-        "f", [t, x, u, *params.values()], [rhs],
-        ["t", "x", "u", *params.keys()], ["rhs"],
+        "f",
+        [t, x, u, *params.values()],
+        [rhs],
+        ["t", "x", "u", *params.keys()],
+        ["rhs"],
     )
     h = cas.Function(
-        "h", [t, x, u, *params.values()], [x],
-        ["t", "x", "u", *params.keys()], ["y"],
+        "h",
+        [t, x, u, *params.values()],
+        [x],
+        ["t", "x", "u", *params.keys()],
+        ["y"],
     )
 
     state_names = [f"x{i}" for i in range(NT)] + [f"M{i}" for i in range(NT)]
@@ -452,8 +553,15 @@ def build_cola_lv_ct_model(name: str = "cola_lv") -> StateSpaceModelCT:
     output_names = state_names[:]
 
     return StateSpaceModelCT(
-        f, h, n=n, nu=nu, ny=ny, params=params, name=name,
-        state_names=state_names, input_names=input_names,
+        f,
+        h,
+        n=n,
+        nu=nu,
+        ny=ny,
+        params=params,
+        name=name,
+        state_names=state_names,
+        input_names=input_names,
         output_names=output_names,
     )
 
@@ -479,7 +587,8 @@ def make_nominal_sim_param_values() -> dict:
 def build_cola_lv_sim_function(
     dt: float, nT: int, m0_val=None, name: str = "cola_lv_sim"
 ):
-    """Build an nT-step simulation function for the LV closed-loop Column A model.
+    """Build an nT-step simulation function for the LV closed-loop Column A
+    model.
 
     Each time step uses CasADi's cvodes stiff integrator to advance the
     state by ``dt`` minutes, making this suitable for the stiff composition
@@ -543,8 +652,7 @@ def build_cola_lv_sim_function(
     scalar_params = {k: cas.SX.sym(k) for k in model.params if k != "M0"}
 
     param_args = [
-        m0_dm if k == "M0" else scalar_params[k]
-        for k in model.params
+        m0_dm if k == "M0" else scalar_params[k] for k in model.params
     ]
 
     f_baked = cas.Function(
@@ -564,13 +672,21 @@ def build_cola_lv_sim_function(
     )
 
     F_step = make_sim_step_function_integrator_fixed_dt(
-        f_baked, n, nu, dt,
+        f_baked,
+        n,
+        nu,
+        dt,
         params=scalar_params,
         name="F",
     )
 
     sim_func = make_n_step_simulation_function(
-        F_step, h_baked, n, nu, ny, nT,
+        F_step,
+        h_baked,
+        n,
+        nu,
+        ny,
+        nT,
         params=scalar_params,
         name=name,
     )

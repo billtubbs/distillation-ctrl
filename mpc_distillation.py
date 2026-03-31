@@ -325,13 +325,9 @@ print("Simulation complete.")
 # ── 7. Plotting ───────────────────────────────────────────────────────
 output_vars = ["OHt", "L", "BmT"]
 input_vars = ["V", "D"]
-output_labels = [
-    f"{v} [{VAR_INFO[v]['units']}]" for v in output_vars
-]
+output_labels = [f"{v} [{VAR_INFO[v]['units']}]" for v in output_vars]
 output_titles = [VAR_INFO[v]["name"] for v in output_vars]
-input_labels = [
-    f"{v} [{VAR_INFO[v]['units']}]" for v in input_vars
-]
+input_labels = [f"{v} [{VAR_INFO[v]['units']}]" for v in input_vars]
 input_titles = [VAR_INFO[v]["name"] for v in input_vars]
 
 # Event lines: (time, label, colour) — vertical dotted lines on every subplot;
@@ -375,9 +371,7 @@ for i in range(ny):
 # Blended transform: x in data coordinates, y in axes fraction (0=bottom, 1=top)
 # so labels sit at the axes top edge regardless of the y-scale.
 ax0 = axs[0]
-top_trans = mtransforms.blended_transform_factory(
-    ax0.transData, ax0.transAxes
-)
+top_trans = mtransforms.blended_transform_factory(ax0.transData, ax0.transAxes)
 for t_ev, lbl, col in events:
     ax0.text(
         t_ev + 0.5,
