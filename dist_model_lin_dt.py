@@ -80,34 +80,63 @@ for j in range(nu):
 plt.tight_layout(rect=[0, 0, 1, 0.95])
 plt.show()
 
+# Nominal operating points (M. Grieve estimates)
+V_NOM = 135.0    # BPH  (= D_NOM + L_NOM)
+D_NOM = 45.0     # BPH
+OHT_NOM = 190.0  # degF
+L_NOM = 90.0     # BPH
+BMT_NOM = 420.0  # degF
+
+# Step sizes: half of estimated maximum variation (±)
+# V varies with D (±15) and L (±40), so ±55 BPH total; half = 27.5
+# D varies ±15 BPH; half = 7.5
+V_STEP = 27.5  # BPH
+D_STEP = 7.5   # BPH
+
 # Additional scenario: step in V at t=5, step in D at t=30
-# (plot inputs and three primary outputs: OHt, L, BmT)
 t = np.arange(0, 61, Ts)
-u_V = np.zeros_like(t)
-u_D = np.zeros_like(t)
-u_V[t >= 5] = 1
-u_D[t >= 30] = 1
+u_V = np.zeros_like(t, dtype=float)
+u_D = np.zeros_like(t, dtype=float)
+u_V[t >= 5] = V_STEP
+u_D[t >= 30] = D_STEP
 
 U = np.vstack([u_V, u_D])
 yout = mimo_forced_response(T, t, U)
 
-fig, axs = plt.subplots(2, 1, figsize=(7, 4), sharex=True)
-fig.suptitle("DT step-input scenario: V@10, D@30 (60 min)")
-axs[0].step(t, u_V, where="post", label="V step")
-axs[0].step(t, u_D, where="post", label="D step")
-axs[0].set_ylabel("Inputs")
-axs[0].legend(loc="upper left")
+# Convert deviations to absolute engineering values
+v_abs = V_NOM + u_V
+d_abs = D_NOM + u_D
+oht_abs = OHT_NOM + yout[0]
+l_abs = L_NOM + yout[1]
+bmt_abs = BMT_NOM + yout[2]
+
+fig, axs = plt.subplots(5, 1, figsize=(7, 9), sharex=True)
+fig.suptitle(
+    f"DT scenario: V +{V_STEP} BPH @t=5, D +{D_STEP} BPH @t=30 (60 min)"
+)
+
+axs[0].step(t, oht_abs, where="post")
+axs[0].set_ylabel("OHt [degF]")
 axs[0].grid(True, alpha=0.4)
 
-axs[1].step(t, yout[0], where="post", label="OHt")
-axs[1].step(t, yout[1], where="post", label="L")
-axs[1].step(t, yout[2], where="post", label="BmT")
-axs[1].set_ylabel("Outputs")
-axs[1].set_xlabel("time [min]")
-axs[1].legend(loc="upper left")
+axs[1].step(t, l_abs, where="post")
+axs[1].set_ylabel("L [BPH]")
 axs[1].grid(True, alpha=0.4)
 
-plt.tight_layout(rect=[0, 0, 1, 0.95])
+axs[2].step(t, bmt_abs, where="post")
+axs[2].set_ylabel("BmT [degF]")
+axs[2].grid(True, alpha=0.4)
+
+axs[3].step(t, v_abs, where="post")
+axs[3].set_ylabel("V [BPH]")
+axs[3].grid(True, alpha=0.4)
+
+axs[4].step(t, d_abs, where="post")
+axs[4].set_ylabel("D [BPH]")
+axs[4].set_xlabel("time [min]")
+axs[4].grid(True, alpha=0.4)
+
+plt.tight_layout(rect=[0, 0, 1, 0.97])
 plt.show()
 
 # Generate state-space model matrices and save to csv files
