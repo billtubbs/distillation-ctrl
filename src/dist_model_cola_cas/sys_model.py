@@ -260,63 +260,55 @@ def _build_cola_rhs(
         RHS vector [dxdt; dMdt].
     """
     # ---- Vapour-liquid equilibria (stages 0..NT-2) ---------------------
-    y_vle = [
-        alpha * x_comp[i] / (1 + (alpha - 1) * x_comp[i])
-        for i in range(NT - 1)
-    ]
+    x_c = x_comp[:NT - 1]
+    y_vle = alpha * x_c / (1 + (alpha - 1) * x_c)
 
     # ---- Vapour flows (NT-1 values, stages 0..NT-2) --------------------
-    #   Below feed (Python 0..NF-2):       V_flow[i] = VB
-    #   At/above feed (Python NF-1..NT-2): V_flow[i] = VB + (1 - qF) * F
-    V_flow = [VB if i < NF - 1 else VB + (1 - qF) * F for i in range(NT - 1)]
-
-    # ---- Liquid flows (NT values, stages 0..NT-1) ----------------------
-    #   L_flow[0]         : unused (reboiler has no liquid inflow from below)
-    #   L_flow[1..NF-1]   : below feed, linearised around L0b
-    #   L_flow[NF..NT-2]  : above feed, linearised around L0
-    #   L_flow[NT-1]      : condenser reflux = LT
-    L_flow = [None] * NT
-    for i in range(1, NF):  # Python 1..NF-1  ←→  MATLAB 2..NF
-        L_flow[i] = L0b + (M[i] - M0[i]) / taul + lam * (V_flow[i - 1] - V0)
-    for i in range(NF, NT - 1):  # Python NF..NT-2 ←→  MATLAB NF+1..NT-1
-        L_flow[i] = L0 + (M[i] - M0[i]) / taul + lam * (V_flow[i - 1] - V0t)
-    L_flow[NT - 1] = LT
-
-    # ---- Material balances: total holdup and component holdup ----------
-    dMdt = [None] * NT
-    dMxdt = [None] * NT
-
-    # Internal stages (Python 1..NT-2  ←→  MATLAB 2..NT-1)
-    for i in range(1, NT - 1):
-        dMdt[i] = L_flow[i + 1] - L_flow[i] + V_flow[i - 1] - V_flow[i]
-        dMxdt[i] = (
-            L_flow[i + 1] * x_comp[i + 1]
-            - L_flow[i] * x_comp[i]
-            + V_flow[i - 1] * y_vle[i - 1]
-            - V_flow[i] * y_vle[i]
-        )
-
-    # Feed correction at the feed stage (Python index NF-1 = 20)
-    dMdt[NF - 1] = dMdt[NF - 1] + F
-    dMxdt[NF - 1] = dMxdt[NF - 1] + F * zF
-
-    # Reboiler (stage 0) — equilibrium stage
-    dMdt[0] = L_flow[1] - V_flow[0] - B
-    dMxdt[0] = L_flow[1] * x_comp[1] - V_flow[0] * y_vle[0] - B * x_comp[0]
-
-    # Condenser (stage NT-1 = 40) — total condenser, no equilibrium
-    dMdt[NT - 1] = V_flow[NT - 2] - LT - D
-    dMxdt[NT - 1] = (
-        V_flow[NT - 2] * y_vle[NT - 2]
-        - LT * x_comp[NT - 1]
-        - D * x_comp[NT - 1]
+    #   Below feed (0..NF-2): VB;  at/above feed (NF-1..NT-2): VB + (1-qF)*F
+    V_flow = cas.vertcat(
+        cas.repmat(VB, NF - 1, 1),
+        cas.repmat(VB + (1 - qF) * F, NT - NF, 1),
     )
 
-    # ---- Composition derivatives ---------------------------------------
-    # dx/dt = (d(M*x)/dt - x*dM/dt) / M
-    dxdt = [(dMxdt[i] - x_comp[i] * dMdt[i]) / M[i] for i in range(NT)]
+    # ---- Liquid flows (NT values, stages 0..NT-1) ----------------------
+    #   index 0        : placeholder (reboiler has no liquid inflow from below)
+    #   index 1..NF-1  : below-feed stages, linearised around L0b
+    #   index NF..NT-2 : above-feed stages, linearised around L0
+    #   index NT-1     : condenser reflux = LT
+    L_below = L0b + (M[1:NF]      - M0[1:NF])      / taul + lam * (V_flow[:NF - 1]        - V0)
+    L_above = L0  + (M[NF:NT - 1] - M0[NF:NT - 1]) / taul + lam * (V_flow[NF - 1:NT - 2] - V0t)
+    L_flow = cas.vertcat(cas.SX(0), L_below, L_above, LT)
 
-    return cas.vertcat(*dxdt, *dMdt)
+    # ---- Material balances: total holdup and component holdup ----------
+    # Vectorised over internal stages (i = 1..NT-2)
+    dMdt_int = L_flow[2:NT] - L_flow[1:NT - 1] + V_flow[:NT - 2] - V_flow[1:NT - 1]
+    dMxdt_int = (
+        L_flow[2:NT] * x_comp[2:NT]
+        - L_flow[1:NT - 1] * x_comp[1:NT - 1]
+        + V_flow[:NT - 2] * y_vle[:NT - 2]
+        - V_flow[1:NT - 1] * y_vle[1:NT - 1]
+    )
+
+    # Feed correction at stage NF-1 (position NF-2 within the internal array)
+    feed_dM  = cas.vertcat(cas.SX.zeros(NF - 2, 1), F,      cas.SX.zeros(NT - 1 - NF, 1))
+    feed_dMx = cas.vertcat(cas.SX.zeros(NF - 2, 1), F * zF, cas.SX.zeros(NT - 1 - NF, 1))
+
+    # Assemble full dMdt and dMxdt (NT elements each)
+    dMdt = cas.vertcat(
+        L_flow[1] - V_flow[0] - B,                                                    # reboiler (i=0)
+        dMdt_int + feed_dM,                                                            # internal (i=1..NT-2)
+        V_flow[NT - 2] - LT - D,                                                      # condenser (i=NT-1)
+    )
+    dMxdt = cas.vertcat(
+        L_flow[1] * x_comp[1] - V_flow[0] * y_vle[0] - B * x_comp[0],               # reboiler
+        dMxdt_int + feed_dMx,                                                          # internal
+        V_flow[NT - 2] * y_vle[NT - 2] - LT * x_comp[NT - 1] - D * x_comp[NT - 1],  # condenser
+    )
+
+    # ---- Composition derivatives: dx/dt = (d(Mx)/dt - x·dM/dt) / M ---
+    dxdt = (dMxdt - x_comp * dMdt) / M
+
+    return cas.vertcat(dxdt, dMdt)
 
 
 def build_cola_ct_model(name: str = "cola") -> StateSpaceModelCT:
