@@ -1,7 +1,7 @@
 import pytest
 import control as con
 import numpy as np
-from dist_ctrl.c2d_utils import c2d_with_delay
+from dist_model_lin_ctrl.c2d_utils import c2d_with_delay
 
 
 def test_c2d_with_delay_no_delay():

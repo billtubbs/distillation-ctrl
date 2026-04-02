@@ -7,10 +7,10 @@ Source: M. Grieve's original Simulink model (August 2020).
 # Each entry carries the descriptive name and engineering units.
 VAR_INFO = {
     # Manipulated variables (model inputs)
-    "V": {"name": "Boilup",              "units": "BPH"},
-    "D": {"name": "Distillate draw",     "units": "BPH"},
+    "V": {"name": "Boilup", "units": "BPH"},
+    "D": {"name": "Distillate draw", "units": "BPH"},
     # Controlled variables (model outputs)
     "OHt": {"name": "Overhead temperature", "units": "degF"},
-    "L":   {"name": "Reflux rate",          "units": "BPH"},
-    "BmT": {"name": "Bottom temperature",   "units": "degF"},
+    "L": {"name": "Reflux rate", "units": "BPH"},
+    "BmT": {"name": "Bottom temperature", "units": "degF"},
 }

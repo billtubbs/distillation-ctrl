@@ -2,8 +2,8 @@ import os
 import control as con
 import numpy as np
 import matplotlib.pyplot as plt
-from dist_ctrl.c2d_utils import c2d_with_delay
-from dist_ctrl.sim_utils import mimo_forced_response
+from dist_model_lin_ctrl.c2d_utils import c2d_with_delay
+from dist_model_lin_ctrl.sim_utils import mimo_forced_response
 
 
 # -----------------------------------------------------------------------------
@@ -113,7 +113,7 @@ plt.show()
 # Generate state-space model matrices and save to csv files
 T_ss = con.minreal(con.ss(T))
 
-data_dir = "src/dist_model_dt"
+data_dir = "src/dist_model_lin_dt"
 os.makedirs(data_dir, exist_ok=True)
 
 for attr in ["A", "B", "C", "D"]:

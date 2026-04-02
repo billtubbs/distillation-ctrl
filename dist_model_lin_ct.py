@@ -1,8 +1,8 @@
 import control as con
 import numpy as np
 import matplotlib.pyplot as plt
-from dist_ctrl.delay_ct import delay_tf
-from dist_ctrl.sim_utils import mimo_forced_response
+from dist_model_lin_ctrl.delay_ct import delay_tf
+from dist_model_lin_ctrl.sim_utils import mimo_forced_response
 
 
 # -----------------------------------------------------------------------------
