@@ -40,6 +40,7 @@ sys.path.insert(
 from dist_model_cola_cas.sys_model import (  # noqa: E402
     F0_DEFAULT,
     L0_DEFAULT,
+    NT,
     QF0_DEFAULT,
     V0_DEFAULT,
     X_SS,
@@ -67,8 +68,8 @@ MV_STEPS = [0.1, 0.1, 0.1, 0.05, 0.1]
 
 # ── Simulation parameters ─────────────────────────────────────────────────
 DT = 1.0  # integration step [min]
-T_HORIZON = 200  # step-response simulation length [min]
-NT_SIM = T_HORIZON  # number of steps (dt=1 min)
+T_HORIZON = 300  # step-response simulation length [min]
+NT_SIM = T_HORIZON  # number of time intervals (dt=1 min)
 
 # Maximum absolute deviation below which a response is considered zero
 NONZERO_THR = 1e-5
@@ -113,9 +114,9 @@ n_cv = len(CV_INDICES)
 for j, (mv_name, mv_unit, step_size) in enumerate(
     zip(MV_NAMES, MV_UNITS, MV_STEPS)
 ):
-    # Apply step in MV j for the full horizon (step at t=0)
+    # Apply step in MV j from t=20 min onwards
     u_step = np.tile(U_NOM, (NT_SIM, 1))
-    u_step[:, j] += step_size
+    u_step[20:, j] += step_size
 
     x_step = run_sim(u_step)  # shape (NT_SIM+1, 82)
 
@@ -145,9 +146,9 @@ for j, (mv_name, mv_unit, step_size) in enumerate(
         axs[i].set_ylabel(f"Δ{cv_label}")
         axs[i].grid(True, alpha=0.3)
 
-    # Bottom subplot: MV step (deviation from nominal, applied at t=0)
-    mv_dev = np.full(NT_SIM + 1, step_size)
-    mv_dev[0] = 0.0
+    # Bottom subplot: MV step (deviation from nominal, applied at t=20)
+    mv_dev = np.zeros(NT_SIM + 1)
+    mv_dev[20:] = step_size
     axs[-1].step(t_eval, mv_dev, where="post", color="tab:orange")
     axs[-1].axhline(0.0, color="k", linewidth=0.5, linestyle="--")
     axs[-1].set_ylabel(f"Δ{mv_name} [{mv_unit}]")
@@ -162,8 +163,8 @@ for j, (mv_name, mv_unit, step_size) in enumerate(
 # Step in each main MV (LT, VB) once during the same 200-min simulation.
 print("\nRunning additional scenario (ΔLT at t=30, ΔVB at t=120) …")
 
-LT_STEP_TIME = 30  # [min]
-VB_STEP_TIME = 120  # [min]
+LT_STEP_TIME = 20  # [min]
+VB_STEP_TIME = 170  # [min]
 LT_STEP = 0.1  # [kmol/min]
 VB_STEP = 0.1  # [kmol/min]
 
@@ -207,4 +208,88 @@ axs[-1].grid(True, alpha=0.3)
 
 plt.tight_layout()
 plt.savefig(PLOT_DIR / "dist_model_cola_lv_scenario.png", dpi=300)
+plt.show()
+
+# ── Column profile plots from scenario simulation ─────────────────────────
+print("\nPlotting column profile plots from scenario …")
+
+x_comp_scen = x_scen[:, :NT]  # light-component mole fractions (NT_SIM+1, 41)
+M_scen = x_scen[:, NT:]  # molar holdups in kmol          (NT_SIM+1, 41)
+
+PROFILE_WIDTH = 8.0  # figure width [in]
+TRAY_HEIGHT = 0.22  # height per tray subplot [in]
+SCENARIO_TITLE = (
+    f"ΔLT={LT_STEP:+.2f} kmol/min @t={LT_STEP_TIME} min, "
+    f"ΔVB={VB_STEP:+.2f} kmol/min @t={VB_STEP_TIME} min"
+)
+
+
+def _make_profile_axes(title: str):
+    """Return (fig, axs) for a compact NT-row profile figure."""
+    fig_h = TRAY_HEIGHT * NT + 0.7
+    fig, axs = plt.subplots(NT, 1, figsize=(PROFILE_WIDTH, fig_h), sharex=True)
+    fig.subplots_adjust(
+        hspace=0,
+        top=1 - 0.45 / fig_h,
+        bottom=0.55 / fig_h,
+        left=0.04,
+        right=0.98,
+    )
+    fig.suptitle(title, fontsize=8)
+    return fig, axs
+
+
+def _style_profile_axes(axs, ylim):
+    """Remove inner decorations; keep black spines; x-axis on bottom only."""
+    for ax in axs:
+        ax.set_ylim(ylim)
+        ax.set_yticks([])
+        ax.tick_params(axis="x", which="both", bottom=False, labelbottom=False)
+        for spine in ax.spines.values():
+            spine.set_color("black")
+            spine.set_linewidth(0.5)
+    axs[-1].tick_params(axis="x", bottom=True, labelbottom=True)
+    axs[-1].set_xlabel("Time [min]", fontsize=8)
+
+
+# ── Composition profile ───────────────────────────────────────────────────
+fig_comp, axs_comp = _make_profile_axes(
+    f"Tray compositions (light=blue, heavy=orange) – {SCENARIO_TITLE}"
+)
+
+for plot_row in range(NT):
+    tray_idx = (
+        NT - 1 - plot_row
+    )  # tray 40 (condenser) at top, 0 (reboiler) at bottom
+    ax = axs_comp[plot_row]
+    x_i = x_comp_scen[:, tray_idx]
+    ax.fill_between(t_eval, 0, 1 - x_i, color="tab:orange", linewidth=0)
+    ax.fill_between(t_eval, 1 - x_i, 1.0, color="tab:blue", linewidth=0)
+
+_style_profile_axes(axs_comp, ylim=(0.0, 1.0))
+plt.savefig(
+    PLOT_DIR / "dist_model_cola_lv_scenario_comp_profiles.png", dpi=150
+)
+plt.show()
+
+# ── Holdup profile ────────────────────────────────────────────────────────
+fig_hold, axs_hold = _make_profile_axes(
+    f"Tray holdups [kmol] – {SCENARIO_TITLE}"
+)
+
+M_lo = M_scen.min()
+M_hi = M_scen.max()
+pad = max(0.005 * (M_hi - M_lo), 1e-4)
+
+for plot_row in range(NT):
+    tray_idx = NT - 1 - plot_row
+    ax = axs_hold[plot_row]
+    ax.fill_between(
+        t_eval, M_lo - pad, M_scen[:, tray_idx], color="tab:green", linewidth=0
+    )
+
+_style_profile_axes(axs_hold, ylim=(M_lo - pad, M_hi + pad))
+plt.savefig(
+    PLOT_DIR / "dist_model_cola_lv_scenario_holdup_profiles.png", dpi=150
+)
 plt.show()
