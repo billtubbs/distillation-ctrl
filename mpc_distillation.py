@@ -62,7 +62,7 @@ import do_mpc
 import matplotlib.pyplot as plt
 import matplotlib.transforms as mtransforms
 from dist_model_lin_ctrl.ss_utils import augment_input_disturbances
-from dist_model_lin_ctrl.variables import VAR_INFO
+from dist_model_lin_ctrl.var_info import var_info
 
 # ── Configuration ─────────────────────────────────────────────────────────
 DATA_DIR = Path("src/dist_model_lin_dt")  # folder containing A/B/C/D.csv
@@ -325,10 +325,10 @@ print("Simulation complete.")
 # ── 7. Plotting ───────────────────────────────────────────────────────
 output_vars = ["OHt", "L", "BmT"]
 input_vars = ["V", "D"]
-output_labels = [f"{v} [{VAR_INFO[v]['units']}]" for v in output_vars]
-output_titles = [VAR_INFO[v]["name"] for v in output_vars]
-input_labels = [f"{v} [{VAR_INFO[v]['units']}]" for v in input_vars]
-input_titles = [VAR_INFO[v]["name"] for v in input_vars]
+output_labels = [f"{v} [{var_info[v]['units']}]" for v in output_vars]
+output_titles = [var_info[v]["name"] for v in output_vars]
+input_labels = [f"{v} [{var_info[v]['units']}]" for v in input_vars]
+input_titles = [var_info[v]["name"] for v in input_vars]
 
 # Event lines: (time, label, colour) — vertical dotted lines on every subplot;
 # text labels placed at the top of the first (upper) subplot only.

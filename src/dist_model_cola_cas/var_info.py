@@ -14,7 +14,7 @@ Value : dict with fields:
     desc   : longer plain-English description with extra context (optional)
 """
 
-VAR_INFO = {
+var_info = {
     # ------------------------------------------------------------------
     # Column flows and feed conditions  (model inputs)
     # ------------------------------------------------------------------

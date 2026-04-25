@@ -32,6 +32,7 @@ from pathlib import Path
 import casadi as cas  # noqa: E402
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 
 sys.path.insert(
     0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "src")
@@ -49,6 +50,8 @@ from dist_model_cola_cas.cola_lv_model import (  # noqa: E402
     build_cola_lv_sim_function,
     make_nominal_sim_param_values,
 )
+from dist_model_cola_cas.var_info import var_info  # noqa: E402
+from plot_utils import make_input_output_tsplot  # noqa: E402
 
 # ── Configuration ─────────────────────────────────────────────────────────
 PLOT_DIR = Path("plots")
@@ -83,86 +86,118 @@ param_vals = make_nominal_sim_param_values()
 print(f"  Model: n={model.n}, nu={model.nu}, ny={model.ny}")
 print(f"  Inputs: {model.input_names}")
 
-t_eval = np.linspace(0.0, NT_SIM * DT, NT_SIM + 1)
+# State names for the monitored CVs (e.g. "x0"=xB, "x40"=xD)
+CV_STATE_NAMES = [model.state_names[i] for i in CV_INDICES]
+
+# ── Extend var_info with per-stage state variables ────────────────────────
+# Stage compositions x0..x40 (x0 = reboiler/bottoms, x40 = condenser/distillate)
+_COMP_NAMES = {0: "Bottoms composition", NT - 1: "Distillate composition"}
+for _i in range(NT):
+    var_info[f"x{_i}"] = {
+        "name": _COMP_NAMES.get(_i, f"Stage {_i} composition"),
+        "symbol": rf"$x_{{{_i}}}$",
+        "units": "mol/mol",
+    }
+
+# Stage holdups M0..M40 (M0 = reboiler, M40 = condenser)
+_HOLDUP_NAMES = {0: "Reboiler holdup", NT - 1: "Condenser holdup"}
+for _i in range(NT):
+    var_info[f"M{_i}"] = {
+        "name": _HOLDUP_NAMES.get(_i, f"Stage {_i} holdup"),
+        "symbol": rf"$M_{{{_i}}}$",
+        "units": "kmol",
+    }
+
+t_eval = pd.Series(np.linspace(0.0, NT_SIM * DT, NT_SIM + 1), name="Time [min]")
 
 
-def run_sim(u_seq: np.ndarray) -> np.ndarray:
-    """Run NT_SIM-step simulation from X_SS.
+def run_sim(t: pd.Series, U: pd.DataFrame) -> pd.DataFrame:
+    """Run simulation from X_SS and return results as a tidy DataFrame.
 
     Parameters
     ----------
-    u_seq : shape (NT_SIM, 5)
-        Input sequence.  u_seq[k] is applied during [k*DT, (k+1)*DT].
+    t : pd.Series
+        Time points, length NT_SIM+1.  The first entry is t=0 (initial
+        condition); subsequent entries are the output sample times.
+    U : pd.DataFrame
+        Input sequence, shape (NT_SIM, nu).  Columns must be the model
+        input names.  U.iloc[k] is applied during [t[k], t[k+1]].
 
     Returns
     -------
-    x_traj : shape (NT_SIM+1, 82)
-        State trajectory (x_traj[0] = X_SS).
+    pd.DataFrame
+        MultiIndex-column DataFrame indexed by t.  Level-0 column names are
+        "Inputs" (forward-filled from U) and "Outputs" (all model states).
     """
     x_traj, _ = sim_func(
-        cas.DM(t_eval),
-        cas.DM(u_seq),
+        cas.DM(t.values),
+        cas.DM(U.values),
         cas.DM(X_SS),
         *param_vals.values(),
     )
-    return np.array(x_traj)
+    x_arr = np.array(x_traj)  # (NT_SIM+1, 82)
+
+    # Forward-fill inputs: repeat last row so inputs align with all t points.
+    # Convention: U.iloc[k] is the input applied from t[k] onwards.
+    U_full = pd.concat([U, U.iloc[[-1]]], ignore_index=True).values
+
+    cols = pd.MultiIndex.from_tuples(
+        [("Inputs", n) for n in model.input_names]
+        + [("Outputs", n) for n in model.state_names]
+    )
+    return pd.DataFrame(
+        np.hstack([U_full, x_arr]),
+        index=t.values,
+        columns=cols,
+    )
 
 
 # ── Step responses ────────────────────────────────────────────────────────
 print("\nComputing step responses …")
 
-n_cv = len(CV_INDICES)
+# Reference values for deviation plots
+output_refs = {sn: X_SS[ci] for sn, ci in zip(CV_STATE_NAMES, CV_INDICES)}
 
 for j, (mv_name, mv_unit, step_size) in enumerate(
     zip(MV_NAMES, MV_UNITS, MV_STEPS)
 ):
     # Apply step in MV j from t=20 min onwards
-    u_step = np.tile(U_NOM, (NT_SIM, 1))
-    u_step[20:, j] += step_size
+    U_arr = np.tile(U_NOM, (NT_SIM, 1))
+    U_arr[20:, j] += step_size
+    U_df = pd.DataFrame(U_arr, columns=model.input_names)
 
-    x_step = run_sim(u_step)  # shape (NT_SIM+1, 82)
+    sim_results = run_sim(t_eval, U_df)
 
-    deltas = [x_step[:, cv_idx] - X_SS[cv_idx] for cv_idx in CV_INDICES]
-    max_devs = [np.abs(d).max() for d in deltas]
-
+    max_devs = [
+        abs(sim_results["Outputs", sn] - X_SS[ci]).max()
+        for sn, ci in zip(CV_STATE_NAMES, CV_INDICES)
+    ]
     if all(m < NONZERO_THR for m in max_devs):
         print(f"  Skip {mv_name}: all CVs near zero")
         continue
 
-    for cv_name, delta in zip(CV_NAMES, deltas):
+    for cv_name, sn, ci in zip(CV_NAMES, CV_STATE_NAMES, CV_INDICES):
+        delta = sim_results["Outputs", sn] - X_SS[ci]
         print(
             f"  {mv_name} → {cv_name}: "
-            f"max|Δ| = {np.abs(delta).max():.4f}, "
-            f"SS Δ = {delta[-1]:.4f}"
+            f"max|Δ| = {abs(delta).max():.4f}, "
+            f"SS Δ = {delta.iloc[-1]:.4f}"
         )
 
-    # One figure per MV: CV subplots on top, MV subplot on bottom
-    fig, axs = plt.subplots(
-        n_cv + 1, 1, figsize=(7, 1 + 1.5 * (n_cv + 1)), sharex=True
+    fig, axs = make_input_output_tsplot(
+        sim_results,
+        output_names=CV_STATE_NAMES,
+        input_names=[mv_name],
+        output_refs=output_refs,
+        input_refs={mv_name: U_NOM[j]},
+        deviation=True,
+        var_info=var_info,
     )
-    fig.suptitle(f"Step response: Δ{mv_name} = {step_size:+g} {mv_unit}")
-
-    for i, (delta, cv_label) in enumerate(zip(deltas, CV_LABELS)):
-        axs[i].plot(t_eval, delta, color="tab:blue")
-        axs[i].axhline(0.0, color="k", linewidth=0.5, linestyle="--")
-        axs[i].set_ylabel(f"Δ{cv_label}")
-        axs[i].grid(True, alpha=0.3)
-
-    # Bottom subplot: MV step (deviation from nominal, applied at t=20)
-    mv_dev = np.zeros(NT_SIM + 1)
-    mv_dev[20:] = step_size
-    axs[-1].step(t_eval, mv_dev, where="post", color="tab:orange")
-    axs[-1].axhline(0.0, color="k", linewidth=0.5, linestyle="--")
-    axs[-1].set_ylabel(f"Δ{mv_name} [{mv_unit}]")
-    axs[-1].set_xlabel("Time [min]")
-    axs[-1].grid(True, alpha=0.3)
-
     plt.tight_layout()
     plt.savefig(PLOT_DIR / f"dist_model_cola_lv_step_{mv_name}.png", dpi=300)
     plt.show()
 
 # ── Additional scenario ───────────────────────────────────────────────────
-# Step in each main MV (LT, VB) once during the same 200-min simulation.
 print("\nRunning additional scenario (ΔLT at t=30, ΔVB at t=120) …")
 
 LT_STEP_TIME = 20  # [min]
@@ -170,44 +205,29 @@ VB_STEP_TIME = 170  # [min]
 LT_STEP = 0.1  # [kmol/min]
 VB_STEP = 0.1  # [kmol/min]
 
-u_scen = np.tile(U_NOM, (NT_SIM, 1))
-u_scen[LT_STEP_TIME:, 0] += LT_STEP  # LT step at t = LT_STEP_TIME
-u_scen[VB_STEP_TIME:, 1] += VB_STEP  # VB step at t = VB_STEP_TIME
+U_arr = np.tile(U_NOM, (NT_SIM, 1))
+U_arr[LT_STEP_TIME:, 0] += LT_STEP  # LT step at t = LT_STEP_TIME
+U_arr[VB_STEP_TIME:, 1] += VB_STEP  # VB step at t = VB_STEP_TIME
+U_scen = pd.DataFrame(U_arr, columns=model.input_names)
 
-x_scen = run_sim(u_scen)  # shape (NT_SIM+1, 82)
+sim_results_scen = run_sim(t_eval, U_scen)
 
-# Time axis for inputs (u_scen[k] applied during [t_eval[k], t_eval[k+1]])
-t_u = t_eval[:-1]
-
-fig, axs = plt.subplots(
-    n_cv + 1, 1, figsize=(8, 1 + 1.5 * (n_cv + 1)), sharex=True
-)
-fig.suptitle(
+SCENARIO_TITLE = (
     f"LV Column A scenario: "
     f"ΔLT={LT_STEP:+.2f} kmol/min @t={LT_STEP_TIME} min, "
     f"ΔVB={VB_STEP:+.2f} kmol/min @t={VB_STEP_TIME} min"
 )
 
-# Upper subplots: one per CV (absolute composition, not deviation)
-for i, (cv_idx, cv_name, cv_label) in enumerate(
-    zip(CV_INDICES, CV_NAMES, CV_LABELS)
-):
-    axs[i].plot(t_eval, x_scen[:, cv_idx], color="tab:blue", label=cv_name)
-    axs[i].axhline(
-        X_SS[cv_idx], color="k", linewidth=0.5, linestyle="--", label="SS"
-    )
-    axs[i].set_ylabel(cv_label)
-    axs[i].legend(loc="best", fontsize=8)
-    axs[i].grid(True, alpha=0.3)
-
-# Bottom subplot: MVs (LT and VB)
-axs[-1].step(t_u, u_scen[:, 0], where="post", label="LT")
-axs[-1].step(t_u, u_scen[:, 1], where="post", label="VB")
-axs[-1].set_ylabel("Flow [kmol/min]")
-axs[-1].set_xlabel("Time [min]")
-axs[-1].legend(loc="best")
-axs[-1].grid(True, alpha=0.3)
-
+fig, axs = make_input_output_tsplot(
+    sim_results_scen,
+    output_names=CV_STATE_NAMES,
+    input_names=["LT", "VB"],
+    output_refs=output_refs,
+    deviation=False,
+    output_line_labels=CV_NAMES,
+    var_info=var_info,
+    figsize=(8, 1 + 1.5 * (len(CV_STATE_NAMES) + 1)),
+)
 plt.tight_layout()
 plt.savefig(PLOT_DIR / "dist_model_cola_lv_scenario.png", dpi=300)
 plt.show()
@@ -215,12 +235,15 @@ plt.show()
 # ── Column profile plots from scenario simulation ─────────────────────────
 print("\nPlotting column profile plots from scenario …")
 
+x_scen = sim_results_scen["Outputs"].values  # (NT_SIM+1, 82)
 x_comp_scen = x_scen[:, :NT]  # light-component mole fractions (NT_SIM+1, 41)
 M_scen = x_scen[:, NT:]  # molar holdups in kmol          (NT_SIM+1, 41)
 
+t_arr = t_eval.values
+
 PROFILE_WIDTH = 8.0  # figure width [in]
 TRAY_HEIGHT = 0.22  # height per tray subplot [in]
-SCENARIO_TITLE = (
+PROFILE_TITLE = (
     f"ΔLT={LT_STEP:+.2f} kmol/min @t={LT_STEP_TIME} min, "
     f"ΔVB={VB_STEP:+.2f} kmol/min @t={VB_STEP_TIME} min"
 )
@@ -256,7 +279,7 @@ def _style_profile_axes(axs, ylim):
 
 # ── Composition profile ───────────────────────────────────────────────────
 fig_comp, axs_comp = _make_profile_axes(
-    f"Tray compositions (light=blue, heavy=orange) – {SCENARIO_TITLE}"
+    f"Tray compositions (light=blue, heavy=orange) – {PROFILE_TITLE}"
 )
 
 for plot_row in range(NT):
@@ -265,8 +288,8 @@ for plot_row in range(NT):
     )  # tray 40 (condenser) at top, 0 (reboiler) at bottom
     ax = axs_comp[plot_row]
     x_i = x_comp_scen[:, tray_idx]
-    ax.fill_between(t_eval, 0, 1 - x_i, color="tab:orange", linewidth=0)
-    ax.fill_between(t_eval, 1 - x_i, 1.0, color="tab:blue", linewidth=0)
+    ax.fill_between(t_arr, 0, 1 - x_i, color="tab:orange", linewidth=0)
+    ax.fill_between(t_arr, 1 - x_i, 1.0, color="tab:blue", linewidth=0)
 
 _style_profile_axes(axs_comp, ylim=(0.0, 1.0))
 plt.savefig(
@@ -276,7 +299,7 @@ plt.show()
 
 # ── Holdup profile ────────────────────────────────────────────────────────
 fig_hold, axs_hold = _make_profile_axes(
-    f"Tray holdups [kmol] – {SCENARIO_TITLE}"
+    f"Tray holdups [kmol] – {PROFILE_TITLE}"
 )
 
 M_lo = M_scen.min()
@@ -287,7 +310,7 @@ for plot_row in range(NT):
     tray_idx = NT - 1 - plot_row
     ax = axs_hold[plot_row]
     ax.fill_between(
-        t_eval, M_lo - pad, M_scen[:, tray_idx], color="tab:green", linewidth=0
+        t_arr, M_lo - pad, M_scen[:, tray_idx], color="tab:green", linewidth=0
     )
 
 _style_profile_axes(axs_hold, ylim=(M_lo - pad, M_hi + pad))
