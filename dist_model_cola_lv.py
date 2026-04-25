@@ -3,7 +3,7 @@ dist_model_cola_lv.py – Step responses for the LV closed-loop
 Skogestad–Morari Column A distillation model with built-in P-controllers.
 
 Model: Nonlinear Column A with built-in P-controllers for level
-       stabilisation (build_cola_lv_ct_model from sys_model.py).
+       stabilisation (build_cola_lv_ct_model from cola_lv_model.py).
        D and B are computed internally from holdup states.
 
 Inputs (MVs, nu=5):
@@ -37,12 +37,14 @@ sys.path.insert(
     0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "src")
 )
 
-from dist_model_cola_cas.sys_model import (  # noqa: E402
+from dist_model_cola_cas.cola_model import (  # noqa: E402
     F0_DEFAULT,
     L0_DEFAULT,
     NT,
     QF0_DEFAULT,
     V0_DEFAULT,
+)
+from dist_model_cola_cas.cola_lv_model import (  # noqa: E402
     X_SS,
     build_cola_lv_sim_function,
     make_nominal_sim_param_values,
