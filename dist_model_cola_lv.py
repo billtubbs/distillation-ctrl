@@ -13,9 +13,15 @@ Inputs (MVs, nu=5):
     u[3]  zF  : feed composition     [mol frac]  nominal 0.5
     u[4]  qF  : feed liquid fraction             nominal 1.0
 
-Controlled variables (CVs) monitored (key product compositions):
-    x[0]  xB  : bottoms composition  [mol frac]  SS ~0.01
-    x[40] xD  : distillate compos.   [mol frac]  SS ~0.99
+Outputs (ny=82):
+    x[0..40]  : liquid mole fraction of light component A  [mol/mol]
+                (x[0] = reboiler/bottoms, x[40] = condenser/distillate)
+    M[0..40]  : molar liquid holdup on each stage           [kmol]
+                (M[0] = reboiler, M[40] = condenser)
+
+Monitored outputs (CVs):
+    x[0]   xB  : bottoms composition     [mol/mol]  SS ~0.01
+    x[40]  xD  : distillate composition  [mol/mol]  SS ~0.99
 
 For each non-zero MV step, one figure is produced with:
     upper subplots (one per CV): CV deviation from steady state
@@ -25,33 +31,30 @@ Additional scenario: step in each main MV (LT then VB) once during
 a single 200-min simulation, with all CVs overlaid.
 """
 
-import os
-import sys
 from pathlib import Path
 
-import casadi as cas  # noqa: E402
+import casadi as cas
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-sys.path.insert(
-    0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "src")
-)
-
-from dist_model_cola_cas.cola_model import (  # noqa: E402
+from dist_model_cola_cas.cola_model import (
     F0_DEFAULT,
     L0_DEFAULT,
     NT,
     QF0_DEFAULT,
     V0_DEFAULT,
 )
-from dist_model_cola_cas.cola_lv_model import (  # noqa: E402
+from dist_model_cola_cas.cola_lv_model import (
+    BS_DEFAULT,
+    DS_DEFAULT,
     X_SS,
     build_cola_lv_sim_function,
-    make_nominal_sim_param_values,
+    make_nominal_lv_param_values,
 )
-from dist_model_cola_cas.var_info import var_info  # noqa: E402
-from plot_utils import make_input_output_tsplot  # noqa: E402
+from dist_model_cola_cas.var_info import var_info
+from plot_utils import make_input_output_tsplot
+from sim_utils import run_simulation
 
 # ── Configuration ─────────────────────────────────────────────────────────
 PLOT_DIR = Path("plots")
@@ -62,9 +65,9 @@ ZF_NOM = 0.5
 U_NOM = np.array([L0_DEFAULT, V0_DEFAULT, F0_DEFAULT, ZF_NOM, QF0_DEFAULT])
 
 # ── CV selection ──────────────────────────────────────────────────────────
-CV_INDICES = [0, 40]  # x[0]=xB (reboiler), x[40]=xD (condenser)
-CV_NAMES = ["xB", "xD"]
-CV_LABELS = ["xB [mol frac]", "xD [mol frac]"]
+# Output names as they appear in sim_results["Outputs"]
+CV_OUTPUT_NAMES = ["x0", "x40", "D", "B"]
+CV_NAMES = ["xB", "xD", "D", "B"]  # short labels for print/legend
 
 # ── MV definitions and step sizes ─────────────────────────────────────────
 MV_NAMES = ["LT", "VB", "F", "zF", "qF"]
@@ -81,13 +84,18 @@ NONZERO_THR = 1e-5
 
 # ── Build simulation function (compiles CasADi code — takes a moment) ────
 print("Building CasADi simulation function …")
-sim_func, model, _ = build_cola_lv_sim_function(dt=DT, nT=NT_SIM)
-param_vals = make_nominal_sim_param_values()
+sim_func, model = build_cola_lv_sim_function(dt=DT, nT=NT_SIM)
+param_vals = make_nominal_lv_param_values()
 print(f"  Model: n={model.n}, nu={model.nu}, ny={model.ny}")
 print(f"  Inputs: {model.input_names}")
 
-# State names for the monitored CVs (e.g. "x0"=xB, "x40"=xD)
-CV_STATE_NAMES = [model.state_names[i] for i in CV_INDICES]
+# Steady-state reference values for each CV output
+CV_OUTPUT_REFS = {
+    "x0": X_SS[0],
+    "x40": X_SS[40],
+    "D": DS_DEFAULT,
+    "B": BS_DEFAULT,
+}
 
 # ── Extend var_info with per-stage state variables ────────────────────────
 # Stage compositions x0..x40 (x0 = reboiler/bottoms, x40 = condenser/distillate)
@@ -108,55 +116,13 @@ for _i in range(NT):
         "units": "kmol",
     }
 
-t_eval = pd.Series(np.linspace(0.0, NT_SIM * DT, NT_SIM + 1), name="Time [min]")
-
-
-def run_sim(t: pd.Series, U: pd.DataFrame) -> pd.DataFrame:
-    """Run simulation from X_SS and return results as a tidy DataFrame.
-
-    Parameters
-    ----------
-    t : pd.Series
-        Time points, length NT_SIM+1.  The first entry is t=0 (initial
-        condition); subsequent entries are the output sample times.
-    U : pd.DataFrame
-        Input sequence, shape (NT_SIM, nu).  Columns must be the model
-        input names.  U.iloc[k] is applied during [t[k], t[k+1]].
-
-    Returns
-    -------
-    pd.DataFrame
-        MultiIndex-column DataFrame indexed by t.  Level-0 column names are
-        "Inputs" (forward-filled from U) and "Outputs" (all model states).
-    """
-    x_traj, _ = sim_func(
-        cas.DM(t.values),
-        cas.DM(U.values),
-        cas.DM(X_SS),
-        *param_vals.values(),
-    )
-    x_arr = np.array(x_traj)  # (NT_SIM+1, 82)
-
-    # Forward-fill inputs: repeat last row so inputs align with all t points.
-    # Convention: U.iloc[k] is the input applied from t[k] onwards.
-    U_full = pd.concat([U, U.iloc[[-1]]], ignore_index=True).values
-
-    cols = pd.MultiIndex.from_tuples(
-        [("Inputs", n) for n in model.input_names]
-        + [("Outputs", n) for n in model.state_names]
-    )
-    return pd.DataFrame(
-        np.hstack([U_full, x_arr]),
-        index=t.values,
-        columns=cols,
-    )
+t_eval = pd.Series(
+    np.linspace(0.0, NT_SIM * DT, NT_SIM + 1), name="Time [min]"
+)
 
 
 # ── Step responses ────────────────────────────────────────────────────────
 print("\nComputing step responses …")
-
-# Reference values for deviation plots
-output_refs = {sn: X_SS[ci] for sn, ci in zip(CV_STATE_NAMES, CV_INDICES)}
 
 for j, (mv_name, mv_unit, step_size) in enumerate(
     zip(MV_NAMES, MV_UNITS, MV_STEPS)
@@ -166,18 +132,18 @@ for j, (mv_name, mv_unit, step_size) in enumerate(
     U_arr[20:, j] += step_size
     U_df = pd.DataFrame(U_arr, columns=model.input_names)
 
-    sim_results = run_sim(t_eval, U_df)
+    sim_results = run_simulation(t_eval, U_df, model, param_vals, X_SS, sim_func=sim_func)
 
     max_devs = [
-        abs(sim_results["Outputs", sn] - X_SS[ci]).max()
-        for sn, ci in zip(CV_STATE_NAMES, CV_INDICES)
+        abs(sim_results["Outputs", sn] - CV_OUTPUT_REFS[sn]).max()
+        for sn in CV_OUTPUT_NAMES
     ]
     if all(m < NONZERO_THR for m in max_devs):
         print(f"  Skip {mv_name}: all CVs near zero")
         continue
 
-    for cv_name, sn, ci in zip(CV_NAMES, CV_STATE_NAMES, CV_INDICES):
-        delta = sim_results["Outputs", sn] - X_SS[ci]
+    for cv_name, sn in zip(CV_NAMES, CV_OUTPUT_NAMES):
+        delta = sim_results["Outputs", sn] - CV_OUTPUT_REFS[sn]
         print(
             f"  {mv_name} → {cv_name}: "
             f"max|Δ| = {abs(delta).max():.4f}, "
@@ -186,9 +152,9 @@ for j, (mv_name, mv_unit, step_size) in enumerate(
 
     fig, axs = make_input_output_tsplot(
         sim_results,
-        output_names=CV_STATE_NAMES,
+        output_names=CV_OUTPUT_NAMES,
         input_names=[mv_name],
-        output_refs=output_refs,
+        output_refs=CV_OUTPUT_REFS,
         input_refs={mv_name: U_NOM[j]},
         deviation=True,
         var_info=var_info,
@@ -210,7 +176,7 @@ U_arr[LT_STEP_TIME:, 0] += LT_STEP  # LT step at t = LT_STEP_TIME
 U_arr[VB_STEP_TIME:, 1] += VB_STEP  # VB step at t = VB_STEP_TIME
 U_scen = pd.DataFrame(U_arr, columns=model.input_names)
 
-sim_results_scen = run_sim(t_eval, U_scen)
+sim_results_scen = run_simulation(t_eval, U_scen, model, param_vals, X_SS, sim_func=sim_func)
 
 SCENARIO_TITLE = (
     f"LV Column A scenario: "
@@ -220,13 +186,13 @@ SCENARIO_TITLE = (
 
 fig, axs = make_input_output_tsplot(
     sim_results_scen,
-    output_names=CV_STATE_NAMES,
+    output_names=CV_OUTPUT_NAMES,
     input_names=["LT", "VB"],
-    output_refs=output_refs,
+    output_refs=CV_OUTPUT_REFS,
     deviation=False,
     output_line_labels=CV_NAMES,
     var_info=var_info,
-    figsize=(8, 1 + 1.5 * (len(CV_STATE_NAMES) + 1)),
+    figsize=(8, 1 + 1.5 * (len(CV_OUTPUT_NAMES) + 1)),
 )
 plt.tight_layout()
 plt.savefig(PLOT_DIR / "dist_model_cola_lv_scenario.png", dpi=300)
@@ -235,7 +201,7 @@ plt.show()
 # ── Column profile plots from scenario simulation ─────────────────────────
 print("\nPlotting column profile plots from scenario …")
 
-x_scen = sim_results_scen["Outputs"].values  # (NT_SIM+1, 82)
+x_scen = sim_results_scen["States"].values  # (NT_SIM+1, 82)
 x_comp_scen = x_scen[:, :NT]  # light-component mole fractions (NT_SIM+1, 41)
 M_scen = x_scen[:, NT:]  # molar holdups in kmol          (NT_SIM+1, 41)
 

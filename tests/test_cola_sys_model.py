@@ -44,7 +44,6 @@ from dist_model_cola_cas.cola_lv_model import (
     build_cola_lv_ct_model,
     build_cola_lv_sim_function,
     make_nominal_lv_param_values,
-    make_nominal_sim_param_values,
 )
 
 # ---------------------------------------------------------------------------
@@ -309,7 +308,7 @@ def lv_model():
 def test_lv_model_dimensions(lv_model):
     assert lv_model.n == 82
     assert lv_model.nu == 5
-    assert lv_model.ny == 82
+    assert lv_model.ny == 84
 
 
 def test_lv_model_input_names(lv_model):
@@ -424,22 +423,17 @@ def test_build_cola_lv_sim_function():
 
     Builds a 5-step simulation (dt=1 min) and verifies:
       - The function has the expected number of inputs/outputs.
-      - M0 is baked in (scalar_params has 13 entries, not 14).
       - A run from the known steady-state initial condition produces a
         trajectory that stays at steady state (change < 1e-6).
     """
     dt = 1.0
     nT = 5
-    sim_func, model, scalar_params = build_cola_lv_sim_function(dt=dt, nT=nT)
+    sim_func, model = build_cola_lv_sim_function(dt=dt, nT=nT)
 
-    # M0 is baked in, so scalar_params has 13 entries (14 minus M0)
-    assert "M0" not in scalar_params
-    assert len(scalar_params) == len(model.params) - 1  # 13
-
-    assert sim_func.n_in() == 3 + len(scalar_params)  # t_eval, U, x0, *params
+    assert sim_func.n_in() == 3 + len(model.params)  # t_eval, U, x0, *params
     assert sim_func.n_out() == 2  # X, Y
 
-    param_vals = make_nominal_sim_param_values()
+    param_vals = make_nominal_lv_param_values()
     t_eval = np.linspace(0.0, nT * dt, nT + 1)
     U = np.tile(U_LV_NOM, (nT, 1))
 

@@ -125,15 +125,19 @@ def make_input_output_tsplot(
         axs[i].plot(t, y, **line_kw)
 
         if output_line_labels and ref is not None and not deviation:
-            axs[i].legend(loc="best", fontsize=8)
+            axs[i].legend(loc="best")
 
-        axs[i].set_title(_var_title(name, var_info), loc="left", fontsize=9)
-        axs[i].set_ylabel(_var_ylabel(name, var_info, delta=deviation and ref is not None))
+        axs[i].set_title(_var_title(name, var_info))
+        axs[i].set_ylabel(
+            _var_ylabel(name, var_info, delta=deviation and ref is not None)
+        )
         axs[i].grid(True, alpha=0.3)
 
     # ── Input subplot ─────────────────────────────────────────────────────
     single_input = len(input_names) == 1
-    has_any_ref = any((input_refs or {}).get(n) is not None for n in input_names)
+    has_any_ref = any(
+        (input_refs or {}).get(n) is not None for n in input_names
+    )
 
     for name in input_names:
         u = sim_results["Inputs"][name].copy()
@@ -159,7 +163,7 @@ def make_input_output_tsplot(
         axs[-1].legend(loc="best")
 
     input_title = ", ".join(_var_title(n, var_info) for n in input_names)
-    axs[-1].set_title(input_title, loc="left", fontsize=9)
+    axs[-1].set_title(input_title)
     axs[-1].set_ylabel(
         _input_ylabel(input_names, var_info, delta=deviation and has_any_ref)
     )

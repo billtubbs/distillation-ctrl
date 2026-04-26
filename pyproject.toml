@@ -16,7 +16,7 @@ dependencies = [
   "pytest",
   "do-mpc",
   "casadi",
-  "casadi-models @ git+https://github.com/billtubbs/casadi-models.git",
+  "casadi-models @ file:///Users/billtubbs/distillation-ctrl/casadi-models",
 ]
 
 [build-system]
@@ -25,4 +25,4 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["dist_model_lin_ctrl*"]
+include = ["dist_model_lin_ctrl*", "dist_model_cola_cas*"]

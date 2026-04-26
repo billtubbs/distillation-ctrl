@@ -95,17 +95,17 @@ plt.tight_layout(rect=[0, 0, 1, 0.97])
 plt.show()
 
 # Nominal operating points (M. Grieve estimates)
-V_NOM = 135.0   # BPH  (= D_NOM + L_NOM)
-D_NOM = 45.0    # BPH
+V_NOM = 135.0  # BPH  (= D_NOM + L_NOM)
+D_NOM = 45.0  # BPH
 OHT_NOM = 190.0  # degF
-L_NOM = 90.0    # BPH
+L_NOM = 90.0  # BPH
 BMT_NOM = 420.0  # degF
 
 # Step sizes: half of estimated maximum variation (±)
 # V varies with D (±15) and L (±40), so ±55 BPH total; half = 27.5
 # D varies ±15 BPH; half = 7.5
 V_STEP = 27.5  # BPH
-D_STEP = 7.5   # BPH
+D_STEP = 7.5  # BPH
 
 # Additional scenario: step in V at t=5, step in D at t=30
 t = np.arange(0, 61, 1)
