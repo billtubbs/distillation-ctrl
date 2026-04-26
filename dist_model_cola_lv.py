@@ -53,7 +53,7 @@ from dist_model_cola_cas.cola_lv_model import (
     make_nominal_lv_param_values,
 )
 from dist_model_cola_cas.var_info import var_info
-from plot_utils import make_input_output_tsplot
+from plot_utils import make_input_output_tsplots, make_input_output_tsplots_sub_refs
 from sim_utils import run_simulation
 
 # ── Configuration ─────────────────────────────────────────────────────────
@@ -150,7 +150,7 @@ for j, (mv_name, mv_unit, step_size) in enumerate(
             f"SS Δ = {delta.iloc[-1]:.4f}"
         )
 
-    fig, axs = make_input_output_tsplot(
+    fig, axs = make_input_output_tsplots_sub_refs(
         sim_results,
         output_names=CV_OUTPUT_NAMES,
         input_names=[mv_name],
@@ -184,12 +184,11 @@ SCENARIO_TITLE = (
     f"ΔVB={VB_STEP:+.2f} kmol/min @t={VB_STEP_TIME} min"
 )
 
-fig, axs = make_input_output_tsplot(
+fig, axs = make_input_output_tsplots(
     sim_results_scen,
     output_names=CV_OUTPUT_NAMES,
     input_names=["LT", "VB"],
     output_refs=CV_OUTPUT_REFS,
-    deviation=False,
     output_line_labels=CV_NAMES,
     var_info=var_info,
     figsize=(8, 1 + 1.5 * (len(CV_OUTPUT_NAMES) + 1)),
