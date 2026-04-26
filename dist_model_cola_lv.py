@@ -79,10 +79,10 @@ MV_STEPS = [0.05, 0.05, 0.05, 0.025, 0.05]
 
 # ── Simulation parameters ─────────────────────────────────────────────────
 DT = 1.0  # integration step [min]
-T_HORIZON = 600  # step-response simulation length [min]
+T_HORIZON = 1000  # step-response simulation length [min]
 NT_SIM = T_HORIZON  # number of time intervals (dt=1 min)
 STEP_TIME = 20  # [min] time of initial step
-RETURN_TIME = T_HORIZON // 2  # [min] time of return step (-2x original)
+RETURN_TIME = 400  # [min] time of return step (-2x original)
 
 # Maximum absolute deviation below which a response is considered zero
 NONZERO_THR = 1e-5
@@ -103,7 +103,8 @@ CV_OUTPUT_REFS = {
 }
 
 # ── Extend var_info with per-stage state variables ────────────────────────
-# Stage compositions x0..x40 (x0 = reboiler/bottoms, x40 = condenser/distillate)
+# Stage compositions x0..x40
+# (x0 = reboiler/bottoms, x40 = condenser/distillate)
 _COMP_NAMES = {0: "Bottoms composition", NT - 1: "Distillate composition"}
 for _i in range(NT):
     var_info[f"x{_i}"] = {
@@ -185,7 +186,9 @@ for j, (mv_name, mv_unit, step_size) in enumerate(
         },
     }
 
-    fig, axs = make_tsplots(dev, plot_info, var_info=var_info)
+    fig, axs = make_tsplots(
+        dev, plot_info, time_label="Time [min]", var_info=var_info
+    )
 
     for ax in axs:
         ax.axhline(0.0, color="k", linewidth=0.5, linestyle="--")
@@ -236,6 +239,7 @@ plot_info_scen = {
 fig, axs = make_tsplots(
     sim_results_scen,
     plot_info_scen,
+    time_label="Time [min]",
     var_info=var_info,
     figsize=(8, 1 + 1.5 * len(plot_info_scen)),
 )
