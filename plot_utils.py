@@ -94,10 +94,12 @@ def make_tsplots(
             ax.plot(t, data[var_name], **kw)
             units_seen.append(info.get("units"))
 
+        if multi:
+            ax.legend(loc="best")
+
         if custom_ylabel is not None:
             ax.set_ylabel(custom_ylabel)
         elif multi:
-            ax.legend(loc="best")
             unique_units = set(u for u in units_seen if u)
             if len(unique_units) == 1:
                 ax.set_ylabel(f"[{unique_units.pop()}]")

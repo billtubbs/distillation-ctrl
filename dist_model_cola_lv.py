@@ -13,27 +13,30 @@ Inputs (MVs, nu=5):
     u[3]  zF  : feed composition     [mol frac]  nominal 0.5
     u[4]  qF  : feed liquid fraction             nominal 1.0
 
-Outputs (ny=82):
+Outputs (ny=84):
     x[0..40]  : liquid mole fraction of light component A  [mol/mol]
                 (x[0] = reboiler/bottoms, x[40] = condenser/distillate)
     M[0..40]  : molar liquid holdup on each stage           [kmol]
                 (M[0] = reboiler, M[40] = condenser)
+    D         : distillate (top product) flow               [kmol/min]
+    B         : bottoms (bottom product) flow               [kmol/min]
 
 Monitored outputs (CVs):
     x[0]   xB  : bottoms composition     [mol/mol]  SS ~0.01
     x[40]  xD  : distillate composition  [mol/mol]  SS ~0.99
+    D           : distillate flow        [kmol/min] SS = 0.5
+    B           : bottoms flow           [kmol/min] SS = 0.5
 
 For each non-zero MV step, one figure is produced with:
-    upper subplots (one per CV): CV deviation from steady state
+    upper subplots: CV deviations from steady state
     bottom subplot: MV step
 
-Additional scenario: step in each main MV (LT then VB) once during
-a single 200-min simulation, with all CVs overlaid.
+Additional scenario: steps in LT then VB during a single simulation,
+with all CVs shown.
 """
 
 from pathlib import Path
 
-import casadi as cas
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -53,7 +56,7 @@ from dist_model_cola_cas.cola_lv_model import (
     make_nominal_lv_param_values,
 )
 from dist_model_cola_cas.var_info import var_info
-from plot_utils import make_input_output_tsplots, make_input_output_tsplots_sub_refs
+from plot_utils import make_tsplots
 from sim_utils import run_simulation
 
 # ── Configuration ─────────────────────────────────────────────────────────
@@ -72,12 +75,14 @@ CV_NAMES = ["xB", "xD", "D", "B"]  # short labels for print/legend
 # ── MV definitions and step sizes ─────────────────────────────────────────
 MV_NAMES = ["LT", "VB", "F", "zF", "qF"]
 MV_UNITS = ["kmol/min", "kmol/min", "kmol/min", "mol frac", "-"]
-MV_STEPS = [0.1, 0.1, 0.1, 0.05, 0.1]
+MV_STEPS = [0.05, 0.05, 0.05, 0.025, 0.05]
 
 # ── Simulation parameters ─────────────────────────────────────────────────
 DT = 1.0  # integration step [min]
-T_HORIZON = 300  # step-response simulation length [min]
+T_HORIZON = 600  # step-response simulation length [min]
 NT_SIM = T_HORIZON  # number of time intervals (dt=1 min)
+STEP_TIME = 20  # [min] time of initial step
+RETURN_TIME = T_HORIZON // 2  # [min] time of return step (-2x original)
 
 # Maximum absolute deviation below which a response is considered zero
 NONZERO_THR = 1e-5
@@ -127,12 +132,15 @@ print("\nComputing step responses …")
 for j, (mv_name, mv_unit, step_size) in enumerate(
     zip(MV_NAMES, MV_UNITS, MV_STEPS)
 ):
-    # Apply step in MV j from t=20 min onwards
+    # Forward step at STEP_TIME, return step (-2x) at RETURN_TIME
     U_arr = np.tile(U_NOM, (NT_SIM, 1))
-    U_arr[20:, j] += step_size
+    U_arr[STEP_TIME:, j] += step_size
+    U_arr[RETURN_TIME:, j] -= 2 * step_size
     U_df = pd.DataFrame(U_arr, columns=model.input_names)
 
-    sim_results = run_simulation(t_eval, U_df, model, param_vals, X_SS, sim_func=sim_func)
+    sim_results = run_simulation(
+        t_eval, U_df, model, param_vals, X_SS, sim_func=sim_func
+    )
 
     max_devs = [
         abs(sim_results["Outputs", sn] - CV_OUTPUT_REFS[sn]).max()
@@ -150,15 +158,37 @@ for j, (mv_name, mv_unit, step_size) in enumerate(
             f"SS Δ = {delta.iloc[-1]:.4f}"
         )
 
-    fig, axs = make_input_output_tsplots_sub_refs(
-        sim_results,
-        output_names=CV_OUTPUT_NAMES,
-        input_names=[mv_name],
-        output_refs=CV_OUTPUT_REFS,
-        input_refs={mv_name: U_NOM[j]},
-        deviation=True,
-        var_info=var_info,
-    )
+    # Subtract steady-state refs to get deviations
+    dev = sim_results.copy()
+    for sn in CV_OUTPUT_NAMES:
+        dev[("Outputs", sn)] -= CV_OUTPUT_REFS[sn]
+    dev[("Inputs", mv_name)] -= U_NOM[j]
+
+    mv_info = var_info.get(mv_name, {})
+    plot_info = {
+        "Deviation in compositions": {
+            ("Outputs", "x40"): {"color": "C0"},
+            ("Outputs", "x0"): {"color": "C1"},
+            "ylabel": "Δ [mol/mol]",
+        },
+        "Deviation in product flows": {
+            ("Outputs", "D"): {"color": "C0"},
+            ("Outputs", "B"): {"color": "C1"},
+            "ylabel": "Δ [kmol/min]",
+        },
+        f"Step changes in {mv_info.get('name', mv_name)}": {
+            ("Inputs", mv_name): {
+                "color": "C2",
+                "drawstyle": "steps-post",
+            },
+            "ylabel": f"Δ{mv_name} [{mv_info.get('units', '')}]",
+        },
+    }
+
+    fig, axs = make_tsplots(dev, plot_info, var_info=var_info)
+
+    for ax in axs:
+        ax.axhline(0.0, color="k", linewidth=0.5, linestyle="--")
     plt.tight_layout()
     plt.savefig(PLOT_DIR / f"dist_model_cola_lv_step_{mv_name}.png", dpi=300)
     plt.show()
@@ -176,7 +206,9 @@ U_arr[LT_STEP_TIME:, 0] += LT_STEP  # LT step at t = LT_STEP_TIME
 U_arr[VB_STEP_TIME:, 1] += VB_STEP  # VB step at t = VB_STEP_TIME
 U_scen = pd.DataFrame(U_arr, columns=model.input_names)
 
-sim_results_scen = run_simulation(t_eval, U_scen, model, param_vals, X_SS, sim_func=sim_func)
+sim_results_scen = run_simulation(
+    t_eval, U_scen, model, param_vals, X_SS, sim_func=sim_func
+)
 
 SCENARIO_TITLE = (
     f"LV Column A scenario: "
@@ -184,15 +216,42 @@ SCENARIO_TITLE = (
     f"ΔVB={VB_STEP:+.2f} kmol/min @t={VB_STEP_TIME} min"
 )
 
-fig, axs = make_input_output_tsplots(
+plot_info_scen = {
+    "Product compositions": {
+        ("Outputs", "x40"): {"color": "C0"},
+        ("Outputs", "x0"): {"color": "C1"},
+        "ylabel": "Δ [mol/mol]",
+    },
+    "Product flows": {
+        ("Outputs", "D"): {"color": "C2"},
+        ("Outputs", "B"): {"color": "C3"},
+        "ylabel": "[kmol/min]",
+    },
+    "Reflux and boilup flows": {
+        ("Inputs", "LT"): {"color": "C4", "drawstyle": "steps-post"},
+        ("Inputs", "VB"): {"color": "C5", "drawstyle": "steps-post"},
+    },
+}
+
+fig, axs = make_tsplots(
     sim_results_scen,
-    output_names=CV_OUTPUT_NAMES,
-    input_names=["LT", "VB"],
-    output_refs=CV_OUTPUT_REFS,
-    output_line_labels=CV_NAMES,
+    plot_info_scen,
     var_info=var_info,
-    figsize=(8, 1 + 1.5 * (len(CV_OUTPUT_NAMES) + 1)),
+    figsize=(8, 1 + 1.5 * len(plot_info_scen)),
 )
+
+# Draw steady-state reference lines
+axs[0].axhline(CV_OUTPUT_REFS["x0"], color="k", linewidth=0.5, linestyle="--")
+axs[1].axhline(CV_OUTPUT_REFS["x40"], color="k", linewidth=0.5, linestyle="--")
+axs[2].axhline(
+    CV_OUTPUT_REFS["D"],
+    color="k",
+    linewidth=0.5,
+    linestyle="--",
+    label="steady-state",
+)
+axs[2].axhline(CV_OUTPUT_REFS["B"], color="k", linewidth=0.5, linestyle="--")
+axs[2].legend(loc="best")
 plt.tight_layout()
 plt.savefig(PLOT_DIR / "dist_model_cola_lv_scenario.png", dpi=300)
 plt.show()

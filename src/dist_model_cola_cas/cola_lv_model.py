@@ -9,6 +9,21 @@ external.  This replicates the MATLAB reference cola_lv.m.
 
 Builds on the open-loop Column A model in cola_model.py.
 
+States  n = 82
+--------------
+x_comp[0  .. NT-1] : liquid mole fraction of light component A on each stage
+                     (x_comp[0] = reboiler/bottoms, x_comp[NT-1] = condenser)
+                     Units: dimensionless (mole fraction)
+
+M[0  .. NT-1]      : molar liquid holdup on each stage
+                     Units: kmol
+
+State vector ordering: compositions first, then holdups.
+  x[0]   = x_comp[0]  (reboiler composition)
+  x[40]  = x_comp[40] (condenser composition)
+  x[41]  = M[0]       (reboiler holdup)
+  x[81]  = M[40]      (condenser holdup)
+
 Inputs  nu = 5
 --------------
 u[0]  LT  : reflux flow (top liquid)                [kmol/min]
@@ -20,6 +35,20 @@ u[4]  qF  : feed liquid fraction (q-value; 1 = saturated liquid feed)
 D and B are computed internally:
     D = Ds + KcD * (M[NT-1] - M0[NT-1])   (condenser level control)
     B = Bs + KcB * (M[0]    - M0[0]   )   (reboiler  level control)
+
+Outputs  ny = 84
+----------------
+y[0..81] : all 82 states (compositions then holdups), i.e. H = I for
+           the first 82 outputs.
+y[82]  D : distillate (top product) flow             [kmol/min]
+y[83]  B : bottoms (bottom product) flow             [kmol/min]
+
+Monitored outputs (CVs)
+-----------------------
+y[0]   x[0]  : bottoms composition    [mol/mol]  SS ≈ 0.01
+y[40]  x[40] : distillate composition [mol/mol]  SS ≈ 0.99
+y[82]  D     : distillate flow        [kmol/min] SS = 0.5
+y[83]  B     : bottoms flow           [kmol/min] SS = 0.5
 
 Additional parameters  (beyond the open-loop column parameters)
 ---------------------------------------------------------------
