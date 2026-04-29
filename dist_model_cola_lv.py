@@ -48,11 +48,14 @@ from dist_model_cola_cas.cola_model import (
     QF0_DEFAULT,
     V0_DEFAULT,
 )
+from cas_models.continuous_time.simulate import (
+    make_n_step_simulation_function_from_model,
+)
 from dist_model_cola_cas.cola_lv_model import (
     BS_DEFAULT,
     DS_DEFAULT,
     X_SS,
-    build_cola_lv_sim_function,
+    build_cola_lv_ct_model,
     make_nominal_lv_param_values,
 )
 from dist_model_cola_cas.var_info import var_info
@@ -88,7 +91,8 @@ NONZERO_THR = 1e-5
 
 # ── Build simulation function (compiles CasADi code — takes a moment) ────
 print("Building CasADi simulation function …")
-sim_func, model = build_cola_lv_sim_function(dt=DT, nT=NT_SIM)
+model = build_cola_lv_ct_model()
+sim_func = make_n_step_simulation_function_from_model(model, dt=DT, nT=NT_SIM)
 param_vals = make_nominal_lv_param_values()
 print(f"  Model: n={model.n}, nu={model.nu}, ny={model.ny}")
 print(f"  Inputs: {model.input_names}")

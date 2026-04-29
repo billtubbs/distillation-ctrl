@@ -36,10 +36,11 @@ def run_simulation(
 
             (t_eval, U, x0, *params) -> (X, Y)
 
-        If None, a new function is built by calling
-        ``build_cola_lv_sim_function(dt, nT)`` where dt and nT are derived
-        from t.  Note: building compiles CasADi code and is slow; pass a
-        pre-built sim_func for repeated calls.
+        If None, a new function is built from the model using
+        ``build_cola_lv_ct_model`` and
+        ``make_n_step_simulation_function_from_model``.  Note: building
+        compiles CasADi code and is slow; pass a pre-built sim_func for
+        repeated calls.
 
     Returns
     -------
@@ -53,16 +54,23 @@ def run_simulation(
                         model this is the 82 states followed by D and B
     """
     if sim_func is None:
-        from dist_model_cola_cas.cola_lv_model import build_cola_lv_sim_function
+        from cas_models.continuous_time.simulate import (
+            make_n_step_simulation_function_from_model,
+        )
+        from dist_model_cola_cas.cola_lv_model import build_cola_lv_ct_model
+
         dt = float(t.iloc[1] - t.iloc[0])
         nT = len(t) - 1
-        sim_func, _ = build_cola_lv_sim_function(dt=dt, nT=nT)
+        _model = build_cola_lv_ct_model()
+        sim_func = make_n_step_simulation_function_from_model(
+            _model, dt=dt, nT=nT
+        )
 
     x_traj, y_traj = sim_func(
         cas.DM(t.values),
         cas.DM(U.values),
         cas.DM(x0),
-        *param_vals.values(),
+        *[param_vals[k] for k in model.params],
     )
     x_arr = np.array(x_traj)  # (nT+1, n)
     y_arr = np.array(y_traj)  # (nT+1, ny)

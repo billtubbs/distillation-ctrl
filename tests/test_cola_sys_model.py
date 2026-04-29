@@ -27,6 +27,9 @@ Test cases
 import casadi as cas
 import numpy as np
 import pytest
+from cas_models.continuous_time.simulate import (
+    make_n_step_simulation_function_from_model,
+)
 
 from dist_model_cola_cas.cola_model import (
     M0_DEFAULT,
@@ -42,7 +45,6 @@ from dist_model_cola_cas.cola_lv_model import (
     X_SS,
     X_SS_COMP,
     build_cola_lv_ct_model,
-    build_cola_lv_sim_function,
     make_nominal_lv_param_values,
 )
 
@@ -418,8 +420,8 @@ def test_steady_state_rootfinder(lv_model):
 # ---------------------------------------------------------------------------
 
 
-def test_build_cola_lv_sim_function():
-    """build_cola_lv_sim_function returns a valid CasADi simulation function.
+def test_make_n_step_simulation_function_from_model():
+    """make_n_step_simulation_function_from_model returns a valid CasADi sim function.
 
     Builds a 5-step simulation (dt=1 min) and verifies:
       - The function has the expected number of inputs/outputs.
@@ -428,7 +430,8 @@ def test_build_cola_lv_sim_function():
     """
     dt = 1.0
     nT = 5
-    sim_func, model = build_cola_lv_sim_function(dt=dt, nT=nT)
+    model = build_cola_lv_ct_model()
+    sim_func = make_n_step_simulation_function_from_model(model, dt=dt, nT=nT)
 
     assert sim_func.n_in() == 3 + len(model.params)  # t_eval, U, x0, *params
     assert sim_func.n_out() == 2  # X, Y

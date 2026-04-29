@@ -69,9 +69,7 @@ import numpy as np
 import casadi as cas
 
 from cas_models.continuous_time.models import StateSpaceModelCT
-from cas_models.continuous_time.simulate import (
-    make_n_step_simulation_function_from_model,
-)
+from cas_models.param_utils import make_symbolic_vars_from_kwargs
 
 from dist_model_cola_cas.cola_model import (
     NT,
@@ -160,7 +158,24 @@ def make_nominal_lv_param_values() -> dict:
     return p
 
 
-def build_cola_lv_ct_model(name: str = "cola_lv") -> StateSpaceModelCT:
+def build_cola_lv_ct_model(
+    name: str = "cola_lv",
+    *,
+    alpha=None,
+    taul=None,
+    F0=None,
+    qF0=None,
+    L0=None,
+    L0b=None,
+    lam=None,
+    V0=None,
+    V0t=None,
+    M0=(NT, 1),
+    KcD=None,
+    KcB=None,
+    Ds=None,
+    Bs=None,
+) -> StateSpaceModelCT:
     """Build the Column A model with built-in P-controllers for level
     stabilisation (replicates cola_lv.m).
 
@@ -178,22 +193,43 @@ def build_cola_lv_ct_model(name: str = "cola_lv") -> StateSpaceModelCT:
     ----------
     name : str
         Name tag for the returned model object.
+    alpha, taul, F0, qF0, L0, L0b, lam, V0, V0t : optional
+        Column physics parameters.  Each may be:
+
+        - ``None`` (default) — a fresh CasADi symbolic scalar is created.
+        - A numeric constant (int, float, ``cas.DM``) — folded into the
+          model expressions; the parameter is excluded from ``model.params``
+          and the CasADi function signatures.
+        - An existing ``cas.SX`` symbolic — reused as-is (useful for sharing
+          a symbol between models).
+    M0 : array-like or tuple, optional
+        Nominal tray holdups, length NT.  Default ``(NT, 1)`` creates a fresh
+        symbolic vector ``cas.SX.sym("M0", NT)``.  Pass a numpy array or DM
+        to bake in a fixed holdup profile.
+    KcD, KcB : optional
+        P-controller gains for condenser and reboiler level (default: symbolic).
+    Ds, Bs : optional
+        Nominal distillate and bottoms flow setpoints (default: symbolic).
 
     Returns
     -------
     StateSpaceModelCT
         Model with n=82 states, nu=5 inputs, ny=84 outputs (82 states + D, B).
-        Symbolic parameters include column params plus KcD, KcB, Ds, Bs.
+        ``model.params`` contains only the parameters that remain symbolic;
+        any parameter supplied as a numeric constant is excluded.
 
     Examples
     --------
-    >>> model = build_cola_lv_ct_model()
+    >>> model = build_cola_lv_ct_model()          # all params symbolic
     >>> model.n, model.nu, model.ny
     (82, 5, 84)
     >>> model.input_names
     ['LT', 'VB', 'F', 'zF', 'qF']
     >>> model.output_names[-2:]
     ['D', 'B']
+    >>> model_no_k2 = build_cola_lv_ct_model(lam=0)   # K2-effect disabled
+    >>> "lam" in model_no_k2.params
+    False
     """
     n = 2 * NT
     nu = 5  # [LT, VB, F, zF, qF]
@@ -203,37 +239,38 @@ def build_cola_lv_ct_model(name: str = "cola_lv") -> StateSpaceModelCT:
     x = cas.SX.sym("x", n)
     u = cas.SX.sym("u", nu)
 
-    alpha = cas.SX.sym("alpha")
-    taul = cas.SX.sym("taul")
-    F0 = cas.SX.sym("F0")
-    qF0 = cas.SX.sym("qF0")
-    L0 = cas.SX.sym("L0")
-    L0b = cas.SX.sym("L0b")
-    lam = cas.SX.sym("lam")
-    V0 = cas.SX.sym("V0")
-    V0t = cas.SX.sym("V0t")
-    M0 = cas.SX.sym("M0", NT)
-    KcD = cas.SX.sym("KcD")
-    KcB = cas.SX.sym("KcB")
-    Ds = cas.SX.sym("Ds")
-    Bs = cas.SX.sym("Bs")
-
-    params = {
-        "alpha": alpha,
-        "taul": taul,
-        "F0": F0,
-        "qF0": qF0,
-        "L0": L0,
-        "L0b": L0b,
-        "lam": lam,
-        "V0": V0,
-        "V0t": V0t,
-        "M0": M0,
-        "KcD": KcD,
-        "KcB": KcB,
-        "Ds": Ds,
-        "Bs": Bs,
-    }
+    # Resolve each parameter: None → new symbolic scalar, tuple → shaped
+    # symbolic array, numeric constant or existing SX → used as-is.
+    all_params = make_symbolic_vars_from_kwargs(
+        alpha=alpha,
+        taul=taul,
+        F0=F0,
+        qF0=qF0,
+        L0=L0,
+        L0b=L0b,
+        lam=lam,
+        V0=V0,
+        V0t=V0t,
+        M0=M0,
+        KcD=KcD,
+        KcB=KcB,
+        Ds=Ds,
+        Bs=Bs,
+    )
+    alpha = all_params["alpha"]
+    taul = all_params["taul"]
+    F0 = all_params["F0"]
+    qF0 = all_params["qF0"]
+    L0 = all_params["L0"]
+    L0b = all_params["L0b"]
+    lam = all_params["lam"]
+    V0 = all_params["V0"]
+    V0t = all_params["V0t"]
+    M0 = all_params["M0"]
+    KcD = all_params["KcD"]
+    KcB = all_params["KcB"]
+    Ds = all_params["Ds"]
+    Bs = all_params["Bs"]
 
     x_comp = x[:NT]
     M = x[NT:]
@@ -262,6 +299,14 @@ def build_cola_lv_ct_model(name: str = "cola_lv") -> StateSpaceModelCT:
         V0t,
         M0,
     )
+
+    # Retain only the parameters that are symbolic SX variables; numeric
+    # constants are already folded into the CasADi expressions.
+    params = {
+        k: v
+        for k, v in all_params.items()
+        if isinstance(v, cas.SX) and len(cas.symvar(v)) > 0
+    }
 
     f = cas.Function(
         "f",
@@ -294,44 +339,3 @@ def build_cola_lv_ct_model(name: str = "cola_lv") -> StateSpaceModelCT:
         input_names=input_names,
         output_names=output_names,
     )
-
-
-def build_cola_lv_sim_function(dt: float, nT: int, name: str = "cola_lv_sim"):
-    """Build an nT-step simulation function for the LV closed-loop Column A
-    model.
-
-    Each time step uses CasADi's cvodes stiff integrator to advance the
-    state by ``dt`` minutes, making this suitable for the stiff composition
-    and hydraulic dynamics of the column.
-
-    Parameters
-    ----------
-    dt : float
-        Integration step size [min].
-    nT : int
-        Number of time steps.
-    name : str
-        Name tag for the compiled CasADi simulation function.
-
-    Returns
-    -------
-    sim_func : cas.Function
-        CasADi Function with signature::
-
-            (t_eval, U, x0, *params) -> (X, Y)
-
-        where ``t_eval`` has shape ``(nT+1,)``, ``U`` has shape ``(nT, 5)``,
-        ``X`` has shape ``(nT+1, 82)``, ``Y`` has shape ``(nT+1, 84)``.
-        Use ``make_nominal_lv_param_values()`` to get nominal parameter values.
-    model : StateSpaceModelCT
-        The underlying closed-loop model.
-
-    Examples
-    --------
-    >>> sim_func, model = build_cola_lv_sim_function(dt=1.0, nT=100)
-    """
-    model = build_cola_lv_ct_model()
-    sim_func = make_n_step_simulation_function_from_model(
-        model, dt=dt, nT=nT, name=name
-    )
-    return sim_func, model

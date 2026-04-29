@@ -81,8 +81,7 @@ distillation-ctrl/
 │   │   │   C.csv, D.csv
 │   │
 │   ├── dist_model_cola_cas/    # Nonlinear Column A CasADi model
-│   │   └── sys_model.py        #   build_cola_lv_ct_model,
-│   │                           #   build_cola_lv_sim_function, ...
+│   │   └── sys_model.py        #   build_cola_lv_ct_model, ...
 │   │
 │   └── dist_model_cola_m/      # Reference MATLAB/Octave implementation
 │       ├── colamod.m           #   Original Skogestad nonlinear model
@@ -239,7 +238,8 @@ The model is provided in two configurations:
 ### Script
 
 **`dist_model_cola_lv.py`** – Builds the LV closed-loop Column A model
-using `build_cola_lv_sim_function` (CasADi stiff ODE integrator, dt=1 min).
+using `build_cola_lv_ct_model` and `make_n_step_simulation_function_from_model`
+(CasADi stiff ODE integrator, dt=1 min).
 Starting from the known steady state, it:
 
 1. Runs a step response for each MV (LT, VB, F, zF, qF) and plots the
