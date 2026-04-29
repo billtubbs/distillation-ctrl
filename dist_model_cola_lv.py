@@ -74,7 +74,6 @@ CV_NAMES = ["xB", "xD", "D", "B"]  # short labels for print/legend
 
 # ── MV definitions and step sizes ─────────────────────────────────────────
 MV_NAMES = ["LT", "VB", "F", "zF", "qF"]
-MV_UNITS = ["kmol/min", "kmol/min", "kmol/min", "mol frac", "-"]
 MV_STEPS = [0.05, 0.05, 0.05, 0.025, 0.05]
 
 # ── Simulation parameters ─────────────────────────────────────────────────
@@ -130,9 +129,7 @@ t_eval = pd.Series(
 # ── Step responses ────────────────────────────────────────────────────────
 print("\nComputing step responses …")
 
-for j, (mv_name, mv_unit, step_size) in enumerate(
-    zip(MV_NAMES, MV_UNITS, MV_STEPS)
-):
+for j, (mv_name, step_size) in enumerate(zip(MV_NAMES, MV_STEPS)):
     # Forward step at STEP_TIME, return step (-2x) at RETURN_TIME
     U_arr = np.tile(U_NOM, (NT_SIM, 1))
     U_arr[STEP_TIME:, j] += step_size
@@ -170,12 +167,12 @@ for j, (mv_name, mv_unit, step_size) in enumerate(
         "Deviation in compositions": {
             ("Outputs", "x40"): {"color": "C0"},
             ("Outputs", "x0"): {"color": "C1"},
-            "ylabel": "Δ [mol/mol]",
+            "ylabel": f"Δ [{var_info['x0']['units']}]",
         },
         "Deviation in product flows": {
             ("Outputs", "D"): {"color": "C0"},
             ("Outputs", "B"): {"color": "C1"},
-            "ylabel": "Δ [kmol/min]",
+            "ylabel": f"Δ [{var_info['D']['units']}]",
         },
         f"Step changes in {mv_info.get('name', mv_name)}": {
             ("Inputs", mv_name): {
@@ -215,20 +212,18 @@ sim_results_scen = run_simulation(
 
 SCENARIO_TITLE = (
     f"LV Column A scenario: "
-    f"ΔLT={LT_STEP:+.2f} kmol/min @t={LT_STEP_TIME} min, "
-    f"ΔVB={VB_STEP:+.2f} kmol/min @t={VB_STEP_TIME} min"
+    f"ΔLT={LT_STEP:+.2f} {var_info['LT']['units']} @t={LT_STEP_TIME} min, "
+    f"ΔVB={VB_STEP:+.2f} {var_info['VB']['units']} @t={VB_STEP_TIME} min"
 )
 
 plot_info_scen = {
     "Product compositions": {
         ("Outputs", "x40"): {"color": "C0"},
         ("Outputs", "x0"): {"color": "C1"},
-        "ylabel": "Δ [mol/mol]",
     },
     "Product flows": {
         ("Outputs", "D"): {"color": "C2"},
         ("Outputs", "B"): {"color": "C3"},
-        "ylabel": "[kmol/min]",
     },
     "Reflux and boilup flows": {
         ("Inputs", "LT"): {"color": "C4", "drawstyle": "steps-post"},
@@ -272,8 +267,8 @@ t_arr = t_eval.values
 PROFILE_WIDTH = 8.0  # figure width [in]
 TRAY_HEIGHT = 0.22  # height per tray subplot [in]
 PROFILE_TITLE = (
-    f"ΔLT={LT_STEP:+.2f} kmol/min @t={LT_STEP_TIME} min, "
-    f"ΔVB={VB_STEP:+.2f} kmol/min @t={VB_STEP_TIME} min"
+    f"ΔLT={LT_STEP:+.2f} {var_info['LT']['units']} @t={LT_STEP_TIME} min, "
+    f"ΔVB={VB_STEP:+.2f} {var_info['VB']['units']} @t={VB_STEP_TIME} min"
 )
 
 
@@ -327,7 +322,7 @@ plt.show()
 
 # ── Holdup profile ────────────────────────────────────────────────────────
 fig_hold, axs_hold = _make_profile_axes(
-    f"Tray holdups [kmol] – {PROFILE_TITLE}"
+    f"Tray holdups [{var_info['M0']['units']}] – {PROFILE_TITLE}"
 )
 
 M_lo = M_scen.min()
