@@ -60,8 +60,10 @@ distillation-ctrl/
 ├── mpc_distillation.py         # Offset-free MPC + EKF simulation
 │                               #   (uses the linear DT model)
 │
-├── dist_model_cola_lv.py       # Nonlinear Column A (LV config) –
+├── dist_model_cola_lv_steps.py # Nonlinear Column A (LV config) –
 │                               #   step responses & scenario simulation
+├── dist_model_cola_lv_ss.py    # Nonlinear Column A (LV config) –
+│                               #   steady-state I/O characteristics
 │
 ├── images/
 │   └── Simulink model diagram.png
@@ -81,7 +83,9 @@ distillation-ctrl/
 │   │   │   C.csv, D.csv
 │   │
 │   ├── dist_model_cola_cas/    # Nonlinear Column A CasADi model
-│   │   └── sys_model.py        #   build_cola_lv_ct_model, ...
+│   │   ├── cola_model.py       #   Open-loop Column A model builder
+│   │   ├── cola_lv_model.py    #   build_cola_lv_ct_model (LV config)
+│   │   └── var_info.py         #   Variable metadata (names, units)
 │   │
 │   └── dist_model_cola_m/      # Reference MATLAB/Octave implementation
 │       ├── colamod.m           #   Original Skogestad nonlinear model
@@ -92,6 +96,9 @@ distillation-ctrl/
 │   ├── test_c2d_utils.py       # Tests for c2d_with_delay
 │   └── test_cola_sys_model.py  # Tests for the nonlinear CasADi model
 │
+├── sim_utils.py                # Simulation helpers: run_simulation,
+│                               #   make_steady_state_solver
+├── plot_utils.py               # Generic time-series plot helpers
 ├── pyproject.toml
 └── requirements.txt
 ```
@@ -213,8 +220,10 @@ The model is provided in two configurations:
 
 - **LV closed-loop** (`build_cola_lv_ct_model`) – D and B are computed
   internally by proportional (P) level controllers from the condenser and
-  reboiler holdup states, leaving five external inputs.  This is the
-  configuration used in `dist_model_cola_lv.py`.
+  reboiler holdup states, leaving five external inputs.  The builder accepts
+  optional keyword arguments for every model parameter; parameters supplied as
+  numeric values are baked in as constants, while omitted parameters become
+  CasADi symbolic variables that appear in the compiled model's `params` dict.
 
 **Manipulated variables (MVs, LV configuration):**
 
@@ -235,9 +244,13 @@ The model is provided in two configurations:
 | x[40] = xD | Condenser (distillate) composition — SS ≈ 0.990 mol frac |
 | x[41..81] | Molar holdups on each stage — SS = 0.5 kmol |
 
-### Script
+### Scripts
 
-**`dist_model_cola_lv.py`** – Builds the LV closed-loop Column A model
+Variable metadata (names, symbols, units) for all inputs and outputs is
+centralised in `src/dist_model_cola_cas/var_info.py` and used throughout all
+Column A scripts and plots.
+
+**`dist_model_cola_lv_steps.py`** – Builds the LV closed-loop Column A model
 using `build_cola_lv_ct_model` and `make_n_step_simulation_function_from_model`
 (CasADi stiff ODE integrator, dt=1 min).
 Starting from the known steady state, it:
@@ -250,6 +263,17 @@ Starting from the known steady state, it:
 2. Runs a 200-min scenario in which LT is stepped at t=30 min and VB is
    stepped at t=120 min, plotting xB and xD (deviations) and both MV
    trajectories.  Saved to `plots/dist_model_cola_lv_scenario.png`.
+
+**`dist_model_cola_lv_ss.py`** – Computes and plots the steady-state
+input-output characteristics of the LV closed-loop model.  For each of the
+five MVs/DVs (LT, VB, F, zF, qF), the steady-state values of the four key
+CVs (xB, xD, D, B) are swept over a ±MV_STEPS range around the nominal
+operating point.  Steady states are found using `make_steady_state_solver`
+from `sim_utils.py`, which compiles a CasADi Newton rootfinder that solves
+`f(x, u, params) = 0` — far faster than running long simulations to
+convergence.  Successive sweep points are warm-started from the previous
+solution (continuation method).  Produces a 4×5 grid of static gain curves
+saved to `plots/dist_model_cola_lv_ss.png`.
 
 ---
 
@@ -267,7 +291,8 @@ pip install -e .
 python dist_model_lin_ct.py        # linear CT step responses
 python dist_model_lin_dt.py        # linear DT step responses + save matrices
 python mpc_distillation.py         # MPC closed-loop simulation
-python dist_model_cola_lv.py       # nonlinear LV step responses + scenario
+python dist_model_cola_lv_steps.py # nonlinear LV step responses + scenario
+python dist_model_cola_lv_ss.py    # nonlinear LV steady-state I/O characteristics
 ```
 
 Tests:
