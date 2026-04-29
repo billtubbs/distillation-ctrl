@@ -15,6 +15,7 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 
 from dist_model_cola_cas.cola_model import (
     F0_DEFAULT,
@@ -44,10 +45,14 @@ CV_OUTPUT_NAMES = ["x0", "x40", "D", "B"]
 
 # Display labels and units for each CV (keyed by output name)
 CV_INFO = {
-    "x0": {"label": "xB", "units": "mol/mol"},
-    "x40": {"label": "xD", "units": "mol/mol"},
-    "D": {"label": "D", "units": "kmol/min"},
-    "B": {"label": "B", "units": "kmol/min"},
+    "x0": {"name": "Bottoms comp.", "symbol": r"$x_B$", "units": "mol/mol"},
+    "x40": {
+        "name": "Distillate comp.",
+        "symbol": r"$x_D$",
+        "units": "mol/mol",
+    },
+    "D": {"name": "Distillate flow", "symbol": r"$D$", "units": "kmol/min"},
+    "B": {"name": "Bottoms flow", "symbol": r"$B$", "units": "kmol/min"},
 }
 
 # Nominal steady-state CV values (for reference lines on plots)
@@ -121,6 +126,19 @@ for j, mv_name in enumerate(MV_NAMES):
     results[mv_name] = cv_vals
     print(f"  {mv_name}: {n_pts} points")
 
+# ── Export results to CSV ─────────────────────────────────────────────────
+DATA_DIR = Path("data")
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+for mv_name in MV_NAMES:
+    df = pd.DataFrame(
+        {mv_name: MV_SWEEPS[mv_name], **results[mv_name]}
+    )
+    csv_path = DATA_DIR / f"ss_{mv_name}.csv"
+    df.to_csv(csv_path, index=False, float_format="%.8g")
+
+print(f"\nSaved CSVs to {DATA_DIR}/")
+
 # ── Plot: 4 CVs × 5 MVs grid ─────────────────────────────────────────────
 print("\nPlotting …")
 
@@ -160,19 +178,17 @@ for col, mv_name in enumerate(MV_NAMES):
         ax.plot(nom_mv, CV_NOM[cv_name], "ko", markersize=4)
         ax.grid(True, alpha=0.3)
 
-        if row == 0:
-            ax.set_title(
-                f"{mv_info.get('name', mv_name)}",
-                fontsize=8,
-            )
         if col == 0:
             ax.set_ylabel(
-                f"{cv_info['label']} [{cv_info['units']}]",
+                f"{cv_info['name']} ({cv_info['symbol']})\n[{cv_info['units']}]",
                 fontsize=8,
             )
         if row == n_cvs - 1:
             mv_symbol = mv_info.get("symbol", mv_name)
-            ax.set_xlabel(f"{mv_symbol} [{mv_units}]", fontsize=7)
+            mv_label = mv_info.get("name", mv_name)
+            ax.set_xlabel(
+                f"{mv_label} ({mv_symbol})\n[{mv_units}]", fontsize=7
+            )
 
 fig.suptitle(
     "Column A Model – Steady-state I/O characteristics (LV configuration)",
