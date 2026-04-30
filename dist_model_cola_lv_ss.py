@@ -709,3 +709,142 @@ fig6.suptitle(
 )
 plt.savefig(PLOT_DIR / "dist_model_cola_lv_ss_regression.png", dpi=150)
 plt.show()
+
+# ── Sensitivity experiment: base / high / low L_T and V_B ────────────────
+print("\nComputing base / high / low LT-VB sensitivity sweeps …")
+
+SCENARIOS = [
+    ("Base (nominal)",   1.00, "C0", "-"),
+    ("+1% $L_T$, $V_B$", 1.01, "C2", "--"),
+    ("−1% $L_T$, $V_B$", 0.99, "C3", ":"),
+]
+
+SENS_FEED_MVS = ["F", "zF"]
+SENS_CVS = ["x0", "x40"]   # xB, xD
+
+# sens_results[scen_label][feed_mv_name][cv_name] → np.ndarray
+sens_results = {}
+
+for scen_label, scale, color, ls in SCENARIOS:
+    lt_val = scale * L0_DEFAULT
+    vb_val = scale * V0_DEFAULT
+    scen_res = {}
+
+    for feed_mv_name in SENS_FEED_MVS:
+        mv_vals = MV_SWEEPS[feed_mv_name]
+        n_pts = len(mv_vals)
+        cv_vals = {cv: np.full(n_pts, np.nan) for cv in SENS_CVS}
+        nom_idx = int(np.searchsorted(mv_vals, U_NOM[MV_NAMES.index(feed_mv_name)]))
+
+        # Find SS of this scenario at the nominal feed point for warm-starting.
+        u_nom_scen = U_NOM.copy()
+        u_nom_scen[0] = lt_val
+        u_nom_scen[1] = vb_val
+        x0_scen, _ = ss_solver(X_SS, u_nom_scen, param_vals)
+
+        for rng in [range(nom_idx, n_pts), range(nom_idx - 1, -1, -1)]:
+            x0 = x0_scen.copy()
+            for k in rng:
+                u = u_nom_scen.copy()
+                u[MV_NAMES.index(feed_mv_name)] = mv_vals[k]
+                x_ss, y_ss = ss_solver(x0, u, param_vals)
+                for cv in SENS_CVS:
+                    cv_vals[cv][k] = y_ss[output_idx[cv]]
+                x0 = x_ss
+
+        scen_res[feed_mv_name] = cv_vals
+    sens_results[scen_label] = scen_res
+    print(f"  {scen_label}: done")
+
+# ── Plot: rows = compositions (xB, xD), cols = feed MVs (F, zF) ──────────
+# sharey="row": same composition shares y-axis; sharex="col": same feed MV shares x-axis.
+print("\nPlotting sensitivity results …")
+
+fig7, axs7 = plt.subplots(
+    2, 2,
+    figsize=(9, 7),
+    sharex="col",
+    sharey="row",
+    constrained_layout=True,
+)
+
+for col, feed_mv_name in enumerate(SENS_FEED_MVS):
+    feed_mv_info = var_info.get(feed_mv_name, {})
+    feed_mv_sym = feed_mv_info.get("symbol", feed_mv_name)
+    feed_mv_unt = feed_mv_info.get("units", "")
+    if feed_mv_unt == "dimensionless":
+        feed_mv_unt = "—"
+    mv_vals = MV_SWEEPS[feed_mv_name]
+    nom_mv = U_NOM[MV_NAMES.index(feed_mv_name)]
+
+    for row, cv_name in enumerate(SENS_CVS):
+        ax = axs7[row, col]
+        cv_info = CV_INFO[cv_name]
+
+        for scen_label, scale, color, ls in SCENARIOS:
+            ax.plot(
+                mv_vals,
+                sens_results[scen_label][feed_mv_name][cv_name],
+                color=color, linestyle=ls, linewidth=1.4,
+                label=scen_label,
+            )
+
+        ax.axvline(nom_mv, color="k", linewidth=0.6, linestyle="--", alpha=0.5)
+        ax.axhline(CV_NOM[cv_name], color="k", linewidth=0.6, linestyle="--", alpha=0.5)
+        ax.plot(nom_mv, CV_NOM[cv_name], "ko", markersize=4)
+        ax.grid(True, alpha=0.3)
+
+        if col == 0:
+            ax.set_ylabel(
+                f"{cv_info['name']} ({cv_info['symbol']})\n[{cv_info['units']}]",
+                fontsize=9,
+            )
+        if row == len(SENS_CVS) - 1:
+            ax.set_xlabel(
+                f"{feed_mv_info.get('name', feed_mv_name)} ({feed_mv_sym})\n[{feed_mv_unt}]",
+                fontsize=9,
+            )
+        if row == 0 and col == 1:
+            ax.legend(fontsize=8, loc="best")
+
+fig7.suptitle(
+    "Column A Model – Composition sensitivity to feed conditions\n"
+    "at nominal, +1% and −1% $L_T$ / $V_B$ (LV configuration)",
+    fontsize=9,
+)
+plt.savefig(PLOT_DIR / "dist_model_cola_lv_ss_sensitivity.png", dpi=150)
+plt.show()
+
+# ── Total-impurity plot: xB + (1 - xD) vs F ──────────────────────────────
+print("\nPlotting total impurity vs feed flow rate …")
+
+f_mv_vals = MV_SWEEPS["F"]
+f_nom = U_NOM[MV_NAMES.index("F")]
+total_imp_nom = CV_NOM["x0"] + (1 - CV_NOM["x40"])
+
+fig8, ax8 = plt.subplots(figsize=(7, 4.5), constrained_layout=True)
+
+for scen_label, scale, color, ls in SCENARIOS:
+    xb = sens_results[scen_label]["F"]["x0"]
+    xd = sens_results[scen_label]["F"]["x40"]
+    ax8.plot(f_mv_vals, xb + xd - 1.0, color=color, linestyle=ls,
+             linewidth=1.6, label=scen_label)
+
+total_imp_nom = CV_NOM["x0"] + CV_NOM["x40"] - 1.0
+ax8.axvline(f_nom, color="k", linewidth=0.6, linestyle="--", alpha=0.5)
+ax8.axhline(total_imp_nom, color="k", linewidth=0.6, linestyle="--", alpha=0.5)
+ax8.plot(f_nom, total_imp_nom, "ko", markersize=5)
+ax8.set_xlabel(
+    f"{var_info['F']['name']} ({var_info['F']['symbol']})\n[{var_info['F']['units']}]",
+    fontsize=10,
+)
+ax8.set_ylabel(r"$x_B + x_D - 1$  [mol/mol]", fontsize=10)
+ax8.legend(fontsize=9)
+ax8.grid(True, alpha=0.3)
+fig8.suptitle(
+    r"Column A Model – Combined purity metric $x_B + x_D - 1$ vs feed flow rate"
+    "\nat nominal, +1% and −1% $L_T$ / $V_B$ (LV configuration)",
+    fontsize=9,
+)
+plt.savefig(PLOT_DIR / "dist_model_cola_lv_ss_total_impurity.png", dpi=150)
+plt.show()

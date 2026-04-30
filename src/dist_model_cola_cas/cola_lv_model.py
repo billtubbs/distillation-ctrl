@@ -207,7 +207,8 @@ def build_cola_lv_ct_model(
         symbolic vector ``cas.SX.sym("M0", NT)``.  Pass a numpy array or DM
         to bake in a fixed holdup profile.
     KcD, KcB : optional
-        P-controller gains for condenser and reboiler level (default: symbolic).
+        P-controller gains for condenser and reboiler level (default:
+        symbolic).
     Ds, Bs : optional
         Nominal distillate and bottoms flow setpoints (default: symbolic).
 
