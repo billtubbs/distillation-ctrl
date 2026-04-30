@@ -171,3 +171,139 @@ def make_steady_state_solver(
         return x_ss, y_ss
 
     return solve
+
+
+def make_composition_targeting_solver(
+    model,
+    free_input_indices,
+    target_state_indices,
+    name="comp_target_solver",
+    method="newton",
+    opts=None,
+):
+    """Build a solver that finds free inputs to achieve target state values at
+    SS.
+
+    Extends the steady-state rootfinding approach by promoting a subset of
+    the model inputs to decision variables and adding state-targeting
+    residuals. The resulting system has ``n + n_free`` equations and unknowns:
+
+        r[0 : n]          = f(0, x, u_full, *params)       (ODE residuals)
+        r[n : n+n_free]   = x[target_state_indices] − targets
+
+    Parameters
+    ----------
+    model : StateSpaceModelCT
+        Model with attributes ``f``, ``h``, ``n``, ``nu``, ``ny``, ``params``.
+    free_input_indices : sequence of int
+        Indices into ``u`` that are free (solved for).  Length must equal
+        ``len(target_state_indices)``.
+    target_state_indices : sequence of int
+        Indices into ``x`` whose steady-state values are targeted.
+    name : str, optional
+        Name for the compiled CasADi rootfinder.
+    method : str, optional
+        CasADi rootfinder algorithm (default ``"newton"``).
+    opts : dict, optional
+        Options forwarded to ``cas.rootfinder``.
+
+    Returns
+    -------
+    callable
+        ``solve(z0, u_fixed, targets, param_vals) -> (x_ss, u_free_ss, y_ss)``
+
+        - ``z0`` : array-like, shape ``(n + n_free,)`` — initial guess
+          ``[x_init, free_input_init]``
+        - ``u_fixed`` : array-like, shape ``(nu − n_free,)`` — values of the
+          fixed inputs, ordered by their position in ``u``
+        - ``targets`` : array-like, shape ``(n_free,)`` — target state values
+        - ``param_vals`` : dict — model parameter values
+        - ``x_ss`` : ``np.ndarray``, shape ``(n,)``
+        - ``u_free_ss`` : ``np.ndarray``, shape ``(n_free,)`` — solved inputs
+        - ``y_ss`` : ``np.ndarray``, shape ``(ny,)``
+
+    Examples
+    --------
+    >>> model = build_cola_lv_ct_model()
+    >>> param_vals = make_nominal_lv_param_values()
+    >>> # Find LT, VB (indices 0, 1) to hit target xB=x[0], xD=x[40]
+    >>> solver = make_composition_targeting_solver(
+    ...     model, free_input_indices=[0, 1], target_state_indices=[0, 40]
+    ... )
+    >>> z0 = np.concatenate([X_SS, [L0_DEFAULT, V0_DEFAULT]])
+    >>> u_fixed = [F_val, zF_val, qF_val]   # in order of fixed indices (2, 3, 4)
+    >>> x_ss, u_free_ss, y_ss = solver(z0, u_fixed, [xB_target, xD_target], param_vals)
+    """
+    if opts is None:
+        opts = {}
+
+    n_free = len(free_input_indices)
+    assert n_free == len(target_state_indices), (
+        "len(free_input_indices) must equal len(target_state_indices)"
+    )
+    fixed_input_indices = [
+        i for i in range(model.nu) if i not in free_input_indices
+    ]
+
+    # ── Symbolic variables ────────────────────────────────────────────────
+    # Decision vector: z = [x (n states), free inputs (n_free)]
+    z_sx = cas.SX.sym("z", model.n + n_free)
+    x_sx = z_sx[: model.n]
+    u_free_sx = [z_sx[model.n + i] for i in range(n_free)]
+
+    # Parameters: [fixed inputs, targets, model params]
+    u_fixed_sx = [
+        cas.SX.sym(f"u_fixed_{i}") for i in range(len(fixed_input_indices))
+    ]
+    targets_sx = [cas.SX.sym(f"target_{i}") for i in range(n_free)]
+    p_sxs = [cas.SX.sym(k, *v.shape) for k, v in model.params.items()]
+
+    # Reconstruct full u in the original input order
+    u_full_list = [None] * model.nu
+    for i, idx in enumerate(free_input_indices):
+        u_full_list[idx] = u_free_sx[i]
+    for i, idx in enumerate(fixed_input_indices):
+        u_full_list[idx] = u_fixed_sx[i]
+    u_sx = cas.vertcat(*u_full_list)
+
+    # ── Residuals ─────────────────────────────────────────────────────────
+    rhs = model.f(cas.SX(0), x_sx, u_sx, *p_sxs)
+    comp_res = cas.vertcat(
+        *[
+            x_sx[idx] - targets_sx[i]
+            for i, idx in enumerate(target_state_indices)
+        ]
+    )
+    r = cas.vertcat(rhs, comp_res)
+
+    p_sx = cas.vertcat(*u_fixed_sx, *targets_sx, *p_sxs)
+    g = cas.Function("g", [z_sx, p_sx], [r])
+    rf = cas.rootfinder(name, method, g, opts)
+
+    def solve(z0, u_fixed, targets, param_vals):
+        p_val = cas.vertcat(
+            cas.DM(u_fixed),
+            cas.DM(targets),
+            *[param_vals[k] for k in model.params],
+        )
+        z_ss = np.array(rf(cas.DM(z0), p_val)).flatten()
+        x_ss = z_ss[: model.n]
+        u_free_ss = z_ss[model.n :]
+
+        u_full = np.zeros(model.nu)
+        for i, idx in enumerate(free_input_indices):
+            u_full[idx] = u_free_ss[i]
+        for i, idx in enumerate(fixed_input_indices):
+            u_full[idx] = float(np.array(cas.DM(u_fixed)).flatten()[i])
+
+        y_ss = np.array(
+            model.h(
+                cas.DM(0),
+                cas.DM(x_ss),
+                cas.DM(u_full),
+                *[param_vals[k] for k in model.params],
+            )
+        ).flatten()
+        return x_ss, u_free_ss, y_ss
+
+    return solve
