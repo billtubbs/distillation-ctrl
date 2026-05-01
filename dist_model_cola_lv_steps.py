@@ -31,8 +31,10 @@ For each non-zero MV step, one figure is produced with:
     upper subplots: CV deviations from steady state
     bottom subplot: MV step
 
-Additional scenario: steps in LT then VB during a single simulation,
-with all CVs shown.
+Additional scenario: Table 11.1 step disturbances in feed rate F,
+feed composition zF, reflux LT, and boilup VB (seven steps at
+t=10, 100, 200, 300, 400, 500, 600 min), with product impurities
+(xB and 1-xD), product flows, and all disturbance inputs shown.
 """
 
 from pathlib import Path
@@ -197,41 +199,56 @@ for j, (mv_name, step_size) in enumerate(zip(MV_NAMES, MV_STEPS)):
     plt.savefig(PLOT_DIR / f"dist_model_cola_lv_step_{mv_name}.png", dpi=300)
     plt.show()
 
-# ── Additional scenario ───────────────────────────────────────────────────
-print("\nRunning additional scenario (ΔLT at t=30, ΔVB at t=120) …")
+# ── Disturbance scenario (Table 11.1 F, zF, LT, VB step disturbances) ─────
+print("\nRunning disturbance scenario (F, zF, LT, VB step disturbances) …")
 
-LT_STEP_TIME = 20  # [min]
-VB_STEP_TIME = 170  # [min]
-LT_STEP = 0.1  # [kmol/min]
-VB_STEP = 0.1  # [kmol/min]
+F_IDX = model.input_names.index("F")
+ZF_IDX = model.input_names.index("zF")
+LT_IDX = model.input_names.index("LT")
+VB_IDX = model.input_names.index("VB")
 
 U_arr = np.tile(U_NOM, (NT_SIM, 1))
-U_arr[LT_STEP_TIME:, 0] += LT_STEP  # LT step at t = LT_STEP_TIME
-U_arr[VB_STEP_TIME:, 1] += VB_STEP  # VB step at t = VB_STEP_TIME
+U_arr[10:, F_IDX] += 0.2    # t=10:  F 1.0 → 1.2
+U_arr[100:, F_IDX] -= 0.4   # t=100: F 1.2 → 0.8
+U_arr[200:, F_IDX] += 0.2   # t=200: F 0.8 → 1.0
+U_arr[300:, ZF_IDX] += 0.1  # t=300: zF 0.5 → 0.6
+U_arr[400:, ZF_IDX] -= 0.2  # t=400: zF 0.6 → 0.4
+U_arr[500:, LT_IDX] += 0.3  # t=500: LT 2.706 → 3.006
+U_arr[600:, VB_IDX] += 0.3  # t=600: VB 3.206 → 3.506
 U_scen = pd.DataFrame(U_arr, columns=model.input_names)
 
 sim_results_scen = run_simulation(
     t_eval, U_scen, model, param_vals, X_SS, sim_func=sim_func
 )
 
-SCENARIO_TITLE = (
-    f"LV Column A scenario: "
-    f"ΔLT={LT_STEP:+.2f} {var_info['LT']['units']} @t={LT_STEP_TIME} min, "
-    f"ΔVB={VB_STEP:+.2f} {var_info['VB']['units']} @t={VB_STEP_TIME} min"
-)
+# Derived output: heavy-component impurity in distillate (1 - xD)
+sim_results_scen[("Outputs", "1-x40")] = 1.0 - sim_results_scen[("Outputs", "x40")]
+var_info["1-x40"] = {
+    "name": "Distillate impurity",
+    "symbol": r"$1-x_{40}$",
+    "units": "mol/mol",
+}
 
 plot_info_scen = {
-    "Product compositions": {
-        ("Outputs", "x40"): {"color": "C0"},
+    "Product impurities": {
+        ("Outputs", "1-x40"): {"color": "C0"},
         ("Outputs", "x0"): {"color": "C1"},
     },
     "Product flows": {
         ("Outputs", "D"): {"color": "C2"},
         ("Outputs", "B"): {"color": "C3"},
     },
-    "Reflux and boilup flows": {
-        ("Inputs", "LT"): {"color": "C4", "drawstyle": "steps-post"},
-        ("Inputs", "VB"): {"color": "C5", "drawstyle": "steps-post"},
+    "Feed rate": {
+        ("Inputs", "F"): {"color": "C4", "drawstyle": "steps-post"},
+    },
+    "Feed composition": {
+        ("Inputs", "zF"): {"color": "C5", "drawstyle": "steps-post"},
+    },
+    "Reflux": {
+        ("Inputs", "LT"): {"color": "C6", "drawstyle": "steps-post"},
+    },
+    "Boilup": {
+        ("Inputs", "VB"): {"color": "C7", "drawstyle": "steps-post"},
     },
 }
 
@@ -244,17 +261,17 @@ fig, axs = make_tsplots(
 )
 
 # Draw steady-state reference lines
+axs[0].axhline(1.0 - CV_OUTPUT_REFS["x40"], color="k", linewidth=0.5, linestyle="--")
 axs[0].axhline(CV_OUTPUT_REFS["x0"], color="k", linewidth=0.5, linestyle="--")
-axs[1].axhline(CV_OUTPUT_REFS["x40"], color="k", linewidth=0.5, linestyle="--")
-axs[2].axhline(
+axs[1].axhline(
     CV_OUTPUT_REFS["D"],
     color="k",
     linewidth=0.5,
     linestyle="--",
     label="steady-state",
 )
-axs[2].axhline(CV_OUTPUT_REFS["B"], color="k", linewidth=0.5, linestyle="--")
-axs[2].legend(loc="best")
+axs[1].axhline(CV_OUTPUT_REFS["B"], color="k", linewidth=0.5, linestyle="--")
+axs[1].legend(loc="best")
 plt.tight_layout()
 plt.savefig(PLOT_DIR / "dist_model_cola_lv_scenario.png", dpi=300)
 plt.show()
@@ -270,10 +287,7 @@ t_arr = t_eval.values
 
 PROFILE_WIDTH = 8.0  # figure width [in]
 TRAY_HEIGHT = 0.22  # height per tray subplot [in]
-PROFILE_TITLE = (
-    f"ΔLT={LT_STEP:+.2f} {var_info['LT']['units']} @t={LT_STEP_TIME} min, "
-    f"ΔVB={VB_STEP:+.2f} {var_info['VB']['units']} @t={VB_STEP_TIME} min"
-)
+PROFILE_TITLE = "F, zF, LT, VB step disturbances (t=10, 100, 200, 300, 400, 500, 600 min)"
 
 
 def _make_profile_axes(title: str):
