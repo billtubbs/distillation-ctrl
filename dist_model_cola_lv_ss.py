@@ -72,7 +72,7 @@ CV_NOM = {
     "B": BS_DEFAULT,
 }
 
-MV_STEPS = [0.10, 0.10, 0.10, 0.05, 0.10]
+MV_STEPS = [0.30, 0.30, 0.20, 0.10, 0.10]
 MV_SWEEPS = {
     mv: np.linspace(U_NOM[j] - step, U_NOM[j] + step, 31)
     for j, (mv, step) in enumerate(zip(MV_NAMES, MV_STEPS))
@@ -943,7 +943,7 @@ if __name__ == "__main__":
             "available plots:\n"
             + "".join(
                 f"  {name:<16}  {PLOT_DESCRIPTIONS[name]}\n"
-                for name in PLOT_DESCRIPTIONS.keys()
+                for name in PLOT_DESCRIPTIONS
             )
         ),
     )
