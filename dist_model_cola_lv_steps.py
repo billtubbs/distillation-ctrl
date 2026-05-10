@@ -82,7 +82,9 @@ CV_OUTPUT_NAMES = ["x0", "x40", "D", "B"]
 CV_NAMES = ["xB", "xD", "D", "B"]
 
 MV_NAMES = ["LT", "VB", "F", "zF", "qF"]
-MV_STEPS = [0.30, 0.30, 0.20, 0.10, 0.10]
+MV_STEPS = list(0.05 * U_NOM)  # 5% of nominal
+# Skogestad-scale steps matching the disturbance scenario:
+# MV_STEPS = [0.30, 0.30, 0.20, 0.10, 0.10]
 
 DT = 1.0  # integration step [min]
 T_HORIZON = 1000  # step-response simulation length [min]

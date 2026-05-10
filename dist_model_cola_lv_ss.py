@@ -72,7 +72,9 @@ CV_NOM = {
     "B": BS_DEFAULT,
 }
 
-MV_STEPS = [0.30, 0.30, 0.20, 0.10, 0.10]
+MV_STEPS = list(0.05 * U_NOM)  # 5% of nominal (±5% sweep range)
+# Skogestad-scale steps matching the disturbance scenario:
+# MV_STEPS = [0.30, 0.30, 0.20, 0.10, 0.10]
 MV_SWEEPS = {
     mv: np.linspace(U_NOM[j] - step, U_NOM[j] + step, 31)
     for j, (mv, step) in enumerate(zip(MV_NAMES, MV_STEPS))
