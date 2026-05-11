@@ -174,7 +174,7 @@ def _style_profile_axes(axs, ylim):
 
 
 # ── Computation functions ──────────────────────────────────────────────────
-def compute_step_responses(model, sim_func, param_vals):
+def compute_step_responses(model, sim_func, param_vals, mv_steps=MV_STEPS):
     """Run step response simulations for each MV.
 
     Returns a dict mapping mv_name → deviation DataFrame for each MV whose
@@ -182,7 +182,7 @@ def compute_step_responses(model, sim_func, param_vals):
     """
     print("\nComputing step responses …")
     step_data = {}
-    for j, (mv_name, step_size) in enumerate(zip(MV_NAMES, MV_STEPS)):
+    for j, (mv_name, step_size) in enumerate(zip(MV_NAMES, mv_steps)):
         U_arr = np.tile(U_NOM, (NT_SIM, 1))
         U_arr[STEP_TIME:, j] += step_size
         U_arr[RETURN_TIME:, j] -= 2 * step_size
@@ -389,76 +389,77 @@ def plot_holdup_profiles(sim_results_scen):
     plt.show()
 
 
-def plot_abstract_steps(step_data, subplot_size=(1.75, 1.75)):
-    """Step response matrix in the same compact abstract style as the SS I/O plot.
+def make_abstract_step_matrix_plot(step_data, axes=None, subplot_size=(1.75, 1.75), **line_kwargs):
+    """Plot one set of step responses onto the abstract matrix grid.
 
-    Shows the forward step period only (t=0 to RETURN_TIME) for each
-    (CV row, MV column) pair.  MVs with negligible response show a flat
-    zero line.
+    Creates the figure and applies all axis decorations/labels on the first
+    call (axes=None).  Subsequent calls with an existing axes array just add
+    curves.  Returns (fig, axes).
     """
-    print("\nPlotting abstract step response matrix …")
     n_cvs = len(CV_OUTPUT_NAMES)
     n_mvs = len(MV_NAMES)
-
-    # Labels to match the SS abstract plot (symbol = physical variable, not stage index)
     cv_labels = {
-        "x0": {"name": "Bottoms comp.", "symbol": r"$x_B$"},
+        "x0":  {"name": "Bottoms comp.",    "symbol": r"$x_B$"},
         "x40": {"name": "Distillate comp.", "symbol": r"$x_D$"},
-        "D": {"name": "Distillate flow", "symbol": r"$D$"},
-        "B": {"name": "Bottoms flow", "symbol": r"$B$"},
+        "D":   {"name": "Distillate flow",  "symbol": r"$D$"},
+        "B":   {"name": "Bottoms flow",     "symbol": r"$B$"},
     }
+    t_slice = t_eval.iloc[:RETURN_TIME + 1].values
 
-    t_slice = t_eval.iloc[: RETURN_TIME + 1].values
-
-    fig, axs = plt.subplots(
-        n_cvs,
-        n_mvs,
-        figsize=(subplot_size[0] * n_mvs, subplot_size[1] * n_cvs),
-        sharex=True,
-        sharey="row",
-        gridspec_kw={"hspace": 0, "wspace": 0},
-    )
+    if axes is None:
+        fig, axes = plt.subplots(
+            n_cvs, n_mvs,
+            figsize=(subplot_size[0] * n_mvs, subplot_size[1] * n_cvs),
+            sharex=True,
+            sharey="row",
+            gridspec_kw={"hspace": 0, "wspace": 0},
+        )
+        new_figure = True
+    else:
+        fig = axes[0, 0].get_figure()
+        new_figure = False
 
     for col, mv_name in enumerate(MV_NAMES):
         mv_info = var_info.get(mv_name, {})
-
         for row, cv_name in enumerate(CV_OUTPUT_NAMES):
-            ax = axs[row, col]
-
+            ax = axes[row, col]
             if mv_name in step_data:
-                y = (
-                    step_data[mv_name][("Outputs", cv_name)]
-                    .iloc[: RETURN_TIME + 1]
-                    .values
-                )
+                y = step_data[mv_name][("Outputs", cv_name)].iloc[:RETURN_TIME + 1].values
             else:
                 y = np.zeros(RETURN_TIME + 1)
+            ax.plot(t_slice, y, **line_kwargs)
+            if new_figure:
+                ax.axvline(STEP_TIME, color="k", linewidth=0.6, linestyle="--", alpha=0.6)
+                ax.axhline(0.0, color="k", linewidth=0.6, linestyle="--", alpha=0.6)
+                ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+                ax.grid(False)
+                if col == 0:
+                    cv_info = cv_labels[cv_name]
+                    ax.set_ylabel(f"{cv_info['name']}\n({cv_info['symbol']})")
+                if row == n_cvs - 1:
+                    mv_symbol = mv_info.get("symbol", mv_name)
+                    mv_label = mv_info.get("name", mv_name)
+                    ax.set_xlabel(f"{mv_label}\n({mv_symbol})")
 
-            ax.plot(t_slice, y, color="C0")
-            ax.axvline(
-                STEP_TIME, color="k", linewidth=0.6, linestyle="--", alpha=0.6
-            )
-            ax.axhline(
-                0.0, color="k", linewidth=0.6, linestyle="--", alpha=0.6
-            )
-            ax.margins(0.12)
-            ax.tick_params(
-                left=False, bottom=False, labelleft=False, labelbottom=False
-            )
-            ax.grid(False)
+    return fig, axes
 
-            if col == 0:
-                cv_info = cv_labels[cv_name]
-                ax.set_ylabel(f"{cv_info['name']}\n({cv_info['symbol']})")
-            if row == n_cvs - 1:
-                mv_symbol = mv_info.get("symbol", mv_name)
-                mv_label = mv_info.get("name", mv_name)
-                ax.set_xlabel(f"{mv_label}\n({mv_symbol})")
 
-    fig.tight_layout(h_pad=0, w_pad=0, rect=[0, 0, 1, 0.94])
-    fig.suptitle(
-        "Column A Model – Step responses (LV configuration)",
+def plot_abstract_steps(step_data_5pct, step_data_1pct, subplot_size=(1.75, 1.75)):
+    """Step response matrix overlaying 1% (C1) and 5% (C0) step sizes.
+
+    Shows the forward step period only (t=0 to RETURN_TIME).
+    """
+    print("\nPlotting abstract step response matrix …")
+    fig, axes = make_abstract_step_matrix_plot(
+        step_data_5pct, subplot_size=subplot_size, color="C0", label="+5%"
     )
+    make_abstract_step_matrix_plot(step_data_1pct, axes=axes, color="C1", label="+1%")
+    for ax in axes.flat:
+        ax.margins(0.12)
+    fig.tight_layout(h_pad=0, w_pad=0, rect=[0, 0, 1, 0.94])
+    fig.suptitle("Column A Model – Step responses (LV configuration)")
+    handles, labels = axes[0, 0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="upper right", fontsize="small", framealpha=0.8)
     plt.savefig(PLOT_DIR / "dist_model_cola_lv_step_abstract.png", dpi=150)
     plt.show()
 
@@ -511,7 +512,10 @@ if __name__ == "__main__":
         if "steps" in selected:
             plot_steps(step_data)
         if "step_abstract" in selected:
-            plot_abstract_steps(step_data)
+            step_data_1pct = compute_step_responses(
+                model, sim_func, param_vals, mv_steps=list(0.01 * U_NOM)
+            )
+            plot_abstract_steps(step_data, step_data_1pct)
 
     # ── Scenario simulation ───────────────────────────────────────────────
     if selected & {"scenario", "comp_profiles", "holdup_profiles"}:
