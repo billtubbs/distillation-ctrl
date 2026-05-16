@@ -39,10 +39,8 @@ from dist_model_cola_cas.cola_lv_model import (
     make_nominal_lv_param_values,
 )
 from dist_model_cola_cas.var_info import var_info
-from sim_utils import (
-    make_composition_targeting_solver,
-    make_steady_state_solver,
-)
+from cas_models.continuous_time.simulate import make_steady_state_solver
+from sim_utils import make_composition_targeting_solver
 
 # ── Configuration ─────────────────────────────────────────────────────────
 PLOT_DIR = Path("plots")
